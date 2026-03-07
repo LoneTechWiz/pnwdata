@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:politicsandwar.com)",
+      "WebSearch",
+      "WebFetch(domain:politicsandwar.fandom.com)",
+      "WebFetch(domain:mrvillage.gitbook.io)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(cp:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(wc:*)",
+      "Bash(pkill:*)",
+      "WebFetch(domain:bkpw.net)",
+      "Bash(source:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:forum.politicsandwar.com)",
+      "WebFetch(domain:politicsandwar.miraheze.org)",
+      "Bash(npx tsc:*)",
+      "Bash(systemctl:*)",
+      "Bash(sudo:*)",
+      "Bash(loginctl show-user devin)",
+      "Bash(journalctl:*)",
+      "Bash(ss:*)",
+      "Bash(kill 434109:*)",
+      "Bash(pwdx 2450:*)"
+    ]
+  }
+}
