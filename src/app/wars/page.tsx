@@ -6,6 +6,7 @@ import { StatCard } from "@/components/StatCard";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { Swords, Shield, AlertTriangle } from "lucide-react";
+import { ExportButton } from "@/components/ExportButton";
 
 function WarRow({ war, memberIds }: { war: War; memberIds: Set<number> }) {
   const isAtt = memberIds.has(war.att_id);
@@ -109,9 +110,33 @@ export default function WarsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-bold text-white">Active Wars</h2>
-          <p className="text-slate-400 text-sm">{wars.length} active wars</p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-white">Active Wars</h2>
+            <p className="text-slate-400 text-sm">{wars.length} active wars</p>
+          </div>
+          <ExportButton
+            filename="active-wars"
+            getData={() => wars.map(w => {
+              const isAtt = memberIds.has(w.att_id);
+              return {
+                "War ID": w.id,
+                Date: w.date,
+                Type: isAtt ? "Offense" : "Defense",
+                "War Type": w.war_type,
+                Attacker: w.attacker?.nation_name ?? `Nation #${w.att_id}`,
+                "Att Alliance": w.attacker?.alliance?.name ?? "",
+                Defender: w.defender?.nation_name ?? `Nation #${w.def_id}`,
+                "Def Alliance": w.defender?.alliance?.name ?? "",
+                "Turns Left": w.turns_left,
+                "Our Resistance": isAtt ? w.att_resistance : w.def_resistance,
+                "Their Resistance": isAtt ? w.def_resistance : w.att_resistance,
+                "Our Points": isAtt ? w.att_points : w.def_points,
+                "Their Points": isAtt ? w.def_points : w.att_points,
+                Reason: w.reason,
+              };
+            })}
+          />
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

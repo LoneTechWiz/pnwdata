@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { Search, ArrowUpDown } from "lucide-react";
+import { ExportButton } from "@/components/ExportButton";
 
 type SortKey = keyof Nation;
 type SortDir = "asc" | "desc";
@@ -94,6 +95,27 @@ export default function MembersPage() {
             <p className="text-slate-400 text-sm">{filtered.length} of {members.length} members shown</p>
           </div>
           <div className="flex items-center gap-3">
+            <ExportButton
+              filename="members"
+              getData={() => filtered.map(m => ({
+                Nation: m.nation_name,
+                Leader: m.leader_name,
+                Discord: bknetDiscord.get(String(m.id)) ?? "",
+                Position: m.alliance_position,
+                Score: m.score,
+                Cities: m.num_cities,
+                Soldiers: m.soldiers,
+                Tanks: m.tanks,
+                Aircraft: m.aircraft,
+                Ships: m.ships,
+                Missiles: m.missiles,
+                Nukes: m.nukes,
+                "Off Wars": m.offensive_wars_count,
+                "Def Wars": m.defensive_wars_count,
+                "Last Active": m.last_active,
+                Status: m.vacation_mode_turns > 0 ? "VM" : m.beige_turns > 0 ? "Beige" : "Active",
+              }))}
+            />
             <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
               <input type="checkbox" checked={showVm} onChange={e => setShowVm(e.target.checked)} className="accent-blue-500" />
               Show Vacation Mode

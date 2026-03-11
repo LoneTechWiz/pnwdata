@@ -7,6 +7,7 @@ import { StatCard } from "@/components/StatCard";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { ArrowUpDown, Building2, TreePine, Search } from "lucide-react";
+import { ExportButton } from "@/components/ExportButton";
 
 type SortKey = "nation_name" | "num_cities" | "avg_infra" | "avg_land" | "total_infra" | "total_land" | "infra_cost" | "land_cost" | "total_cost";
 type SortDir = "asc" | "desc";
@@ -236,6 +237,28 @@ export default function InfraPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
+            <ExportButton
+              filename="infra-land"
+              getData={() => rows.map(r => {
+                const costs = showCost ? upgradeCosts(r, parsedTargetInfra, parsedTargetLand) : null;
+                const row: Record<string, unknown> = {
+                  Nation: r.nation_name,
+                  Leader: r.leader_name,
+                  Discord: bknetDiscord.get(String(r.id)) ?? "",
+                  Cities: r.num_cities,
+                  "Avg Infra/City": Math.round(r.avg_infra),
+                  "Avg Land/City": Math.round(r.avg_land),
+                  "Total Infra": Math.round(r.total_infra),
+                  "Total Land": Math.round(r.total_land),
+                };
+                if (costs) {
+                  row["Infra Cost"] = Math.round(costs.infra);
+                  row["Land Cost"] = Math.round(costs.land);
+                  row["Total Cost"] = Math.round(costs.total);
+                }
+                return row;
+              })}
+            />
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input

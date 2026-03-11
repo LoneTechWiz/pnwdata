@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { ArrowDownLeft, ArrowUpRight, Landmark } from "lucide-react";
+import { ExportButton } from "@/components/ExportButton";
 
 const RESOURCES = ["money", "coal", "oil", "uranium", "iron", "bauxite", "lead", "gasoline", "munitions", "steel", "aluminum", "food"] as const;
 const RESOURCE_COLORS: Record<string, string> = {
@@ -89,9 +90,34 @@ export default function BankPage() {
         </div>
 
         <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl overflow-x-auto">
-          <div className="px-4 py-3 border-b border-[#2a3150] flex items-center gap-2">
-            <Landmark size={16} className="text-slate-400" />
-            <h3 className="text-sm font-semibold text-slate-300">All Transactions</h3>
+          <div className="px-4 py-3 border-b border-[#2a3150] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Landmark size={16} className="text-slate-400" />
+              <h3 className="text-sm font-semibold text-slate-300">All Transactions</h3>
+            </div>
+            <ExportButton
+              filename="bank-records"
+              getData={() => recs.map(rec => ({
+                Date: rec.date,
+                From: rec.sender?.nation_name ?? `${ENTITY_TYPES[rec.sender_type] ?? "?"} #${rec.sender_id}`,
+                "From Type": ENTITY_TYPES[rec.sender_type] ?? rec.sender_type,
+                To: rec.receiver?.nation_name ?? `${ENTITY_TYPES[rec.receiver_type] ?? "?"} #${rec.receiver_id}`,
+                "To Type": ENTITY_TYPES[rec.receiver_type] ?? rec.receiver_type,
+                Note: rec.note,
+                Money: rec.money,
+                Coal: rec.coal,
+                Oil: rec.oil,
+                Uranium: rec.uranium,
+                Iron: rec.iron,
+                Bauxite: rec.bauxite,
+                Lead: rec.lead,
+                Gasoline: rec.gasoline,
+                Munitions: rec.munitions,
+                Steel: rec.steel,
+                Aluminum: rec.aluminum,
+                Food: rec.food,
+              }))}
+            />
           </div>
           <table className="w-full text-sm whitespace-nowrap">
             <thead>

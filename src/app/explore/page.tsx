@@ -9,6 +9,7 @@ import {
   Plus, X, ArrowUpDown, SlidersHorizontal, ChevronDown, ChevronUp,
   RotateCcw, Bookmark,
 } from "lucide-react";
+import { ExportButton } from "@/components/ExportButton";
 import {
   FIELDS, FIELD_MAP, GROUPS, Filter, opsForField, defaultOp,
   applyFilter, DEFAULT_FIELDS, PRESETS,
@@ -225,6 +226,16 @@ export default function ExplorePage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ExportButton
+              filename="explore"
+              getData={() => rows.map(nation => {
+                const row: Record<string, unknown> = {};
+                for (const f of visibleFieldDefs) {
+                  row[f.label] = f.getValue(nation);
+                }
+                return row;
+              })}
+            />
             <button
               onClick={reset}
               className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors px-3 py-1.5 rounded-lg border border-[#2a3150] hover:border-slate-500"

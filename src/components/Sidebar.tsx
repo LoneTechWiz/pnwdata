@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield, Building2, Search, Clock, Calculator } from "lucide-react";
+import { LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield, Building2, Search, Clock, Calculator, Target } from "lucide-react";
 
 const nav = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Members", href: "/members", icon: Users },
   { label: "Military", href: "/military", icon: Shield },
+  { label: "MMR Checker", href: "/mmr", icon: Target },
   { label: "Infra & Land", href: "/infra", icon: Building2 },
   { label: "Wars", href: "/wars", icon: Swords },
   { label: "Bank", href: "/bank", icon: Landmark },

@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { Clock } from "lucide-react";
+import { ExportButton } from "@/components/ExportButton";
 
 const THRESHOLD_HOURS = 36;
 
@@ -54,12 +55,27 @@ export default function InactivePage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-bold text-white">Inactive Nations</h2>
-          <p className="text-slate-400 text-sm">
-            {inactive.length} nation{inactive.length !== 1 ? "s" : ""} inactive for more than {THRESHOLD_HOURS} hours
-            {" "}(excluding vacation mode)
-          </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-white">Inactive Nations</h2>
+            <p className="text-slate-400 text-sm">
+              {inactive.length} nation{inactive.length !== 1 ? "s" : ""} inactive for more than {THRESHOLD_HOURS} hours
+              {" "}(excluding vacation mode)
+            </p>
+          </div>
+          <ExportButton
+            filename="inactive-nations"
+            getData={() => inactive.map(m => ({
+              Nation: m.nation_name,
+              Leader: m.leader_name,
+              Position: m.alliance_position,
+              Discord: bknetDiscord.get(String(m.id)) ?? "",
+              Cities: m.num_cities,
+              Score: m.score,
+              "Last Active": m.last_active,
+              "Hours Inactive": Math.floor(hoursAgo(m.last_active)),
+            }))}
+          />
         </div>
 
         {inactive.length === 0 ? (
