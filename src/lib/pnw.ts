@@ -22,7 +22,28 @@ export interface Nation {
   domestic_policy: string;
   offensive_wars_count: number;
   defensive_wars_count: number;
-  cities?: { infrastructure: number; land: number }[];
+  money?: number;
+  gasoline?: number;
+  munitions?: number;
+  steel?: number;
+  aluminum?: number;
+  continent?: string;
+  mass_irrigation?: boolean;
+  international_trade_center?: boolean;
+  telecommunications_satellite?: boolean;
+  uranium_enrichment_program?: boolean;
+  cities?: {
+    infrastructure: number;
+    land: number;
+    barracks: number;
+    factory: number;
+    hangar: number;
+    drydock: number;
+    hospital: number;
+    policestation: number;
+    recycling_center: number;
+    subway: number;
+  }[];
 }
 
 export interface War {
@@ -181,10 +202,24 @@ export interface TradePrice {
   credits: number;
 }
 
+export interface GameInfo {
+  radiation: {
+    global: number;
+    north_america: number;
+    south_america: number;
+    europe: number;
+    africa: number;
+    asia: number;
+    australia: number;
+  };
+}
+
 export const fetchMembers = (): Promise<Nation[]> => apiFetch("members");
+export const fetchApplicants = (): Promise<Nation[]> => apiFetch("applicants");
 export const fetchWars = (): Promise<War[]> => apiFetch("wars");
 export const fetchBankrecs = (): Promise<BankRec[]> => apiFetch("bankrecs");
 export const fetchAlliance = (): Promise<Alliance | null> => apiFetch("alliance");
 export const fetchBknetMembers = (): Promise<BknetMember[]> => apiFetch("bknet_members");
 export const fetchSyncStatus = (): Promise<SyncStatus> => apiFetch("status");
 export const fetchTradePrices = (): Promise<TradePrice | null> => apiFetch("trade_prices");
+export const fetchGameInfo = (): Promise<GameInfo | null> => apiFetch("game_info");

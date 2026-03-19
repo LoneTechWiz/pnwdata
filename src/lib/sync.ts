@@ -25,11 +25,13 @@ const ALLIANCE_QUERY = `
 
 const MEMBERS_QUERY = `
   query($alliance_id:[Int]) { nations(alliance_id:$alliance_id, first:500) { data {
-    id nation_name leader_name discord score num_cities color last_active
+    id nation_name leader_name discord score num_cities color last_active continent
+    money gasoline munitions steel aluminum
     soldiers tanks aircraft ships missiles nukes
     vacation_mode_turns beige_turns alliance_position
     war_policy domestic_policy offensive_wars_count defensive_wars_count
-    cities { infrastructure land }
+    cities { infrastructure land barracks factory hangar drydock hospital policestation recycling_center subway }
+    mass_irrigation international_trade_center telecommunications_satellite uranium_enrichment_program
   } } }
 `;
 
@@ -61,6 +63,10 @@ const TRADE_PRICES_QUERY = `
   } } }
 `;
 
+const GAME_INFO_QUERY = `
+  { game_info { radiation { global north_america south_america europe africa asia australia } } }
+`;
+
 async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${PNW_API}?api_key=${process.env.PNW_API_KEY}`, {
     method: "POST",
@@ -84,12 +90,13 @@ export async function sync(): Promise<void> {
     const allianceId = Number(meData.me.nation.alliance_id);
     if (!allianceId) throw new Error("Could not determine alliance ID from API key");
 
-    const [allianceData, membersData, warsData, bankData, tradePricesData] = await Promise.all([
+    const [allianceData, membersData, warsData, bankData, tradePricesData, gameInfoData] = await Promise.all([
       gql<{ alliances: { data: Alliance[] } }>(ALLIANCE_QUERY, { id: [allianceId] }),
       gql<{ nations: { data: Nation[] } }>(MEMBERS_QUERY, { alliance_id: [allianceId] }),
       gql<{ wars: { data: War[] } }>(WARS_QUERY, { alliance_id: [allianceId] }),
       gql<{ bankrecs: { data: BankRec[] } }>(BANK_RECS_QUERY, { or_id: [allianceId], first: 500 }),
       gql<{ tradeprices: { data: unknown[] } }>(TRADE_PRICES_QUERY),
+      gql<{ game_info: { radiation: Record<string, number> } }>(GAME_INFO_QUERY),
     ]);
 
     const bknetData = await bknetFetch<{ members: unknown[] }>("/members").catch(err => {
@@ -98,6 +105,7 @@ export async function sync(): Promise<void> {
     });
 
     const now = Date.now();
+    const applicants = membersData.nations.data.filter(n => n.alliance_position === "APPLICANT");
     const nations = membersData.nations.data.filter(n => n.alliance_position !== "APPLICANT");
     const wars = warsData.wars.data;
     const bankrecs = bankData.bankrecs.data;
@@ -116,12 +124,25 @@ export async function sync(): Promise<void> {
         .run(JSON.stringify(latestPrice), now);
     }
 
+    db.prepare(`INSERT OR REPLACE INTO game_info (id, data, updated_at) VALUES (1, ?, ?)`)
+      .run(JSON.stringify(gameInfoData.game_info), now);
+
     const upsertNation = db.prepare(`INSERT OR REPLACE INTO nations (id, data, updated_at) VALUES (?, ?, ?)`);
     db.transaction((items: Nation[]) => {
       for (const n of items) upsertNation.run(n.id, JSON.stringify(n), now);
     })(nations);
     if (nations.length > 0) {
       db.prepare(`DELETE FROM nations WHERE id NOT IN (${nations.map(n => n.id).join(",")})`).run();
+    }
+
+    const upsertApplicant = db.prepare(`INSERT OR REPLACE INTO applicants (id, data, updated_at) VALUES (?, ?, ?)`);
+    db.transaction((items: Nation[]) => {
+      for (const n of items) upsertApplicant.run(n.id, JSON.stringify(n), now);
+    })(applicants);
+    if (applicants.length > 0) {
+      db.prepare(`DELETE FROM applicants WHERE id NOT IN (${applicants.map(n => n.id).join(",")})`).run();
+    } else {
+      db.prepare(`DELETE FROM applicants`).run();
     }
 
     db.prepare(`DELETE FROM wars`).run();
