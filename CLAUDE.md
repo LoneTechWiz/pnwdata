@@ -44,12 +44,14 @@ PnW GraphQL API + BK Net REST API
 
 All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEGER` (Unix ms timestamp):
 
-- `nations` — alliance members (excludes APPLICANTs)
+- `nations` — alliance members (**excludes** APPLICANTs; filtered in sync.ts by `alliance_position !== "APPLICANT"`)
+- `applicants` — nations with `alliance_position === "APPLICANT"`; upserted each sync, fully deleted if none
 - `wars` — active wars (fully replaced each sync)
 - `bankrecs` — last 500 bank records (upserted)
 - `alliance_meta` — single row (id=1) with alliance stats
 - `trade_prices` — single row (id=1) with 24h average market prices
 - `bknet_members` — member data from BK Net (includes resources, spies, projects, Discord)
+- `game_info` — single row (id=1) with radiation levels per continent
 - `sync_status` — single row (id=1) tracking last sync time, status, counts
 
 ### Frontend Patterns
@@ -59,6 +61,28 @@ All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEG
 - `AppShell` wraps every page (sidebar nav + header with sync status)
 - Charts use Recharts; icons use lucide-react
 - Tailwind dark theme: background `#0f1117`, cards `#161b2e`, borders `#2a3150`
+- **Excel export**: `src/lib/excel.ts` exports `exportToExcel(filename, data[])` using SheetJS (`xlsx`). `src/components/ExportButton.tsx` wraps it as a reusable button — used on every list page.
+- **Rules of Hooks**: All `useMemo`/`useCallback` calls must come **before** any conditional early returns (loading/error guards). Violation causes runtime crash on direct URL navigation when TanStack Query cache is cold.
+- **BK Net ID map keys**: Always use `String(m.nation.id)` when building maps and `String(m.id)` when looking up — BK Net IDs arrive as strings at runtime despite TypeScript typing them as `number`.
+- **Nation resource fields**: `money`, `gasoline`, `munitions`, `steel`, `aluminum` are fetched from the PnW GraphQL API and stored in the `nations` table — these reflect stockpile on the nation, not the alliance bank. Do not use BK Net `resources` for these, as BK Net includes alliance account funds.
+
+### Pages
+
+| Route | Description |
+|-------|-------------|
+| `/` | Dashboard |
+| `/members` | Alliance member list with military stats |
+| `/applicants` | Pending applicants sorted by last active |
+| `/military` | Military overview |
+| `/mmr` | MMR Checker — input buildings per city, see who's at max units + spies |
+| `/infra` | Infrastructure & land stats |
+| `/wars` | Active wars |
+| `/bank` | Bank records |
+| `/cashholders` | Stockpile — nations exceeding per-city thresholds for cash, gasoline, munitions, steel, or aluminum (VM nations excluded) |
+| `/charts` | Charts |
+| `/inactive` | Inactive members |
+| `/optimizer` | City Build Optimizer |
+| `/explore` | Explore nations |
 
 ### External APIs
 
@@ -85,8 +109,14 @@ BKNET_API_TOKEN=    # BK Net API token (optional; BK Net features disabled if ab
 ### Deployment Notes
 
 - The app runs in **production mode** (`next start`), not dev mode
-- After any code change: `npm run build` then restart the server (`pkill -f "next start" && npm run start`)
-- Exit code 144 on background restart tasks is a false alarm — the server starts fine; verify with `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000`
+- After any code change: `npm run build` then restart the server:
+  ```bash
+  kill -9 $(ss -tlnp | grep ':3000' | grep -oP 'pid=\K[0-9]+')
+  nohup npm run start > /tmp/nextjs.log 2>&1 &
+  sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
+  ```
+- `pkill -f "next start"` is unreliable (exits 144, process survives) — always use the `ss`/`kill -9` approach above
+- **Stale chunk pitfall**: static pages are prerendered with JS chunk hashes baked into the HTML. If the old server process keeps running after a rebuild, it serves HTML referencing chunks that no longer exist, causing 500s on chunk fetches and a frozen "Loading…" UI. Always confirm the old process is dead before starting the new one.
 
 ### BK Net Resilience
 
@@ -97,10 +127,20 @@ BKNET_API_TOKEN=    # BK Net API token (optional; BK Net features disabled if ab
 
 - **Slots**: `floor(infra / 50)`
 - **Nuclear power**: 1 plant per `ceil(infra / 2000)` slots; $10,500/day + 1.8 uranium/day/plant
-- **Commerce income**: `((commerce% / 50) × 0.725 + 0.725) × (infra × 100) × 12`
+- **Disease rate**: `max(0, (infra/100)² × 0.1 + infra/100 − 25) / 100` (as a percentage)
+  - Each hospital reduces disease by 2.5 percentage points (max 5 hospitals/city)
+  - Hospitals needed for 0 disease: `ceil(baseDisease / 2.5)`
+- **Commerce income**: `((commerce% / 50) × 0.725 + 0.725) × effectivePopulation × 12`
+  - `effectivePopulation = infra × 100 × (1 − disease% / 100)`
+  - Disease directly reduces population and therefore commerce income
 - **Max commerce**: 100% base, 115% with ITC project, 125% with ITC + Telecom Sat
+- **Commerce buildings** (per city): Stadium +12% (max 3), Shopping Mall +9% (max **5**), Subway +8% (max 1), Bank +5% (max **6**), Supermarket +3% (max 6)
 - **Farm food/day**: `(land / 400) × 12` with Mass Irrigation, `(land / 500) × 12` without — then multiply by specialization bonus `1 + (0.5 × (farms−1) / 19)` for n farms
 - **Steel Mill**: 9 steel/day from 3 iron + 3 coal, $4,000/day op cost, max 5/city
 - **Aluminum Refinery**: 9 aluminum/day from 3 bauxite, $2,500/day, max 5/city
 - **Munitions Factory**: 18 munitions/day from 6 lead, $4,000/day, max 5/city
 - **Oil Refinery**: 6 gasoline/day from 3 oil, $4,000/day, max 5/city
+- **Military buildings** (consume slots, no income): Barracks $3,000/day (max 5), War Factories $3,000/day (max 5), Hangars $1,000/day (max 5), Dockyards $2,500/day (max 3)
+- **Civil buildings** (consume slots, reduce disease/crime/pollution): Hospitals $1,000/day (max 5), Police Stations $750/day (max 5), Recycling Centers $2,500/day (max 3)
+- **MMR unit caps**: Soldiers = barracks×3000×cities, Tanks = factories×250×cities, Aircraft = hangars×15×cities, Ships = dockyards×5×cities
+- **Spy caps**: 60 with Intelligence Agency project, 50 without; training rate 2/day
