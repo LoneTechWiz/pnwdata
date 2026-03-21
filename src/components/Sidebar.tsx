@@ -13,7 +13,6 @@ const nav = [
   { label: "Wars", href: "/wars", icon: Swords },
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
   { label: "Bank", href: "/bank", icon: Landmark },
-  { label: "Stockpile", href: "/cashholders", icon: DollarSign },
   { label: "Charts", href: "/charts", icon: BarChart2 },
   { label: "Inactive", href: "/inactive", icon: Clock },
   { label: "City Build", href: "/optimizer", icon: Calculator },
