@@ -78,6 +78,10 @@ export interface WarTargetsResponse {
 }
 
 export async function GET(request: NextRequest) {
+  if (!process.env.PNW_API_KEY) {
+    return NextResponse.json({ error: "PNW_API_KEY is not configured" }, { status: 500 });
+  }
+
   // 1. Validate nationId
   const nationIdStr = request.nextUrl.searchParams.get("nationId");
   const nationId = Number(nationIdStr);
@@ -86,33 +90,34 @@ export async function GET(request: NextRequest) {
   }
 
   // 2. Read and validate config
-  let enemyAllianceIds: number[];
+  let rawIds: unknown;
   try {
     const configPath = join(process.cwd(), "data", "war-config.json");
     const config = JSON.parse(readFileSync(configPath, "utf-8")) as { enemy_alliance_ids: unknown };
-    const ids = config.enemy_alliance_ids;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return NextResponse.json(
-        { error: "war-config.json: enemy_alliance_ids must be a non-empty array — ask an admin to add alliance IDs" },
-        { status: 500 }
-      );
-    }
-    if (ids.length > 25) {
-      return NextResponse.json(
-        { error: "war-config.json: too many enemy_alliance_ids (max 25)" },
-        { status: 400 }
-      );
-    }
-    enemyAllianceIds = ids.map(Number);
-    if (enemyAllianceIds.some(id => !Number.isFinite(id) || id <= 0)) {
-      return NextResponse.json(
-        { error: "war-config.json: all enemy_alliance_ids must be positive integers" },
-        { status: 500 }
-      );
-    }
+    rawIds = config.enemy_alliance_ids;
   } catch {
     return NextResponse.json(
-      { error: "data/war-config.json not found — ask an admin to create it" },
+      { error: "data/war-config.json not found or invalid JSON — ask an admin to check it" },
+      { status: 500 }
+    );
+  }
+
+  if (!Array.isArray(rawIds) || rawIds.length === 0) {
+    return NextResponse.json(
+      { error: "war-config.json: enemy_alliance_ids must be a non-empty array — ask an admin to add alliance IDs" },
+      { status: 500 }
+    );
+  }
+  if (rawIds.length > 25) {
+    return NextResponse.json(
+      { error: "war-config.json: too many enemy_alliance_ids (max 25)" },
+      { status: 400 }
+    );
+  }
+  const enemyAllianceIds = rawIds.map(Number);
+  if (enemyAllianceIds.some(id => !Number.isFinite(id) || id <= 0)) {
+    return NextResponse.json(
+      { error: "war-config.json: all enemy_alliance_ids must be positive integers" },
       { status: 500 }
     );
   }
