@@ -105,10 +105,11 @@ export default function WarTargetsPage() {
         {/* Input */}
         <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4 flex items-end gap-3 flex-wrap">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            <label htmlFor="nation-id-input" className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
               Your Nation ID
             </label>
             <input
+              id="nation-id-input"
               type="number"
               min={1}
               value={nationIdInput}
@@ -183,6 +184,8 @@ export default function WarTargetsPage() {
                     <th
                       key={key}
                       onClick={() => handleSort(key)}
+                      onKeyDown={e => (e.key === "Enter" || e.key === " ") && handleSort(key)}
+                      tabIndex={0}
                       className="px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide cursor-pointer hover:text-white whitespace-nowrap select-none"
                     >
                       <span className="flex items-center gap-1">
