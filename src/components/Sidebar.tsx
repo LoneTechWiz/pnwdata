@@ -5,23 +5,23 @@ import { useState, useEffect } from "react";
 import { LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield, Building2, Search, Clock, Calculator, Target, UserPlus, DollarSign, Crosshair, Lock, LockOpen } from "lucide-react";
 
 const nav = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Members", href: "/members", icon: Users },
   { label: "Applicants", href: "/applicants", icon: UserPlus },
   { label: "Military", href: "/military", icon: Shield },
   { label: "MMR Checker", href: "/mmr", icon: Target },
-  { label: "Infra & Land", href: "/infra", icon: Building2 },
-  { label: "Wars", href: "/wars", icon: Swords },
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
-  { label: "Bank", href: "/bank", icon: Landmark },
-  { label: "Charts", href: "/charts", icon: BarChart2 },
-  { label: "Inactive", href: "/inactive", icon: Clock },
   { label: "City Build", href: "/optimizer", icon: Calculator },
-  { label: "Explore", href: "/explore", icon: Search },
 ];
 
 const hiddenNav = [
+  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Infra & Land", href: "/infra", icon: Building2 },
+  { label: "Wars", href: "/wars", icon: Swords },
+  { label: "Bank", href: "/bank", icon: Landmark },
   { label: "Stockpile", href: "/cashholders", icon: DollarSign },
+  { label: "Charts", href: "/charts", icon: BarChart2 },
+  { label: "Inactive", href: "/inactive", icon: Clock },
+  { label: "Explore", href: "/explore", icon: Search },
 ];
 
 const STORAGE_KEY = "pnw_unlocked";
