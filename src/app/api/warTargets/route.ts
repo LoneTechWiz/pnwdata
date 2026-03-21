@@ -164,6 +164,9 @@ export async function GET(request: NextRequest) {
   const targets: WarTarget[] = allEnemyNations
     .filter(n => n.score >= minScore && n.score <= maxScore)
     .filter(n => !atWarWith.has(Number(n.id)))
+    .filter(n => n.defensive_wars_count < 3)
+    .filter(n => n.vacation_mode_turns === 0)
+    .filter(n => n.beige_turns === 0)
     .map(n => ({
       id: n.id,
       nation_name: n.nation_name,
