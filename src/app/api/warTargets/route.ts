@@ -24,7 +24,7 @@ const NATION_SCORE_QUERY = `
 `;
 
 const OFFENSIVE_WARS_QUERY = `
-  query($att_id:[Int]) { wars(att_id:$att_id, active:true) { data { def_id } } }
+  query($attid:[Int]) { wars(attid:$attid, active:true) { data { def_id } } }
 `;
 
 const ENEMY_MEMBERS_QUERY = `
@@ -123,19 +123,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 3. Fetch in parallel
+  // 3. Fetch your nation score + active wars first, then alliance members in parallel
   let nationData: { nations: { data: { score: number }[] } };
   let warsData: { wars: { data: { def_id: number }[] } };
-  let allianceMembersData: { nations: { data: EnemyNation[] } }[];
   try {
-    [nationData, warsData, allianceMembersData] = await Promise.all([
+    [nationData, warsData] = await Promise.all([
       gql<{ nations: { data: { score: number }[] } }>(NATION_SCORE_QUERY, { id: [nationId] }),
-      gql<{ wars: { data: { def_id: number }[] } }>(OFFENSIVE_WARS_QUERY, { att_id: [nationId] }),
-      Promise.all(
-        enemyAllianceIds.map(id =>
-          gql<{ nations: { data: EnemyNation[] } }>(ENEMY_MEMBERS_QUERY, { alliance_id: [id] })
-        )
-      ),
+      gql<{ wars: { data: { def_id: number }[] } }>(OFFENSIVE_WARS_QUERY, { attid: [nationId] }),
     ]);
   } catch (err) {
     return NextResponse.json(
@@ -153,7 +147,19 @@ export async function GET(request: NextRequest) {
   const maxScore = Math.ceil(yourScore * 4 / 3);
   const atWarWith = new Set(warsData.wars.data.map(w => Number(w.def_id)));
 
-  const allEnemyNations = allianceMembersData.flatMap(d => d.nations.data);
+  // Fetch alliance members with allSettled so a single 503 doesn't kill the whole request
+  const memberResults = await Promise.allSettled(
+    enemyAllianceIds.map(id =>
+      gql<{ nations: { data: EnemyNation[] } }>(ENEMY_MEMBERS_QUERY, { alliance_id: [id] })
+    )
+  );
+  const failedCount = memberResults.filter(r => r.status === "rejected").length;
+  if (failedCount === memberResults.length) {
+    return NextResponse.json({ error: "PnW API error: all alliance queries failed" }, { status: 502 });
+  }
+  const allEnemyNations = memberResults
+    .filter((r): r is PromiseFulfilledResult<{ nations: { data: EnemyNation[] } }> => r.status === "fulfilled")
+    .flatMap(r => r.value.nations.data);
 
   const targets: WarTarget[] = allEnemyNations
     .filter(n => n.score >= minScore && n.score <= maxScore)
