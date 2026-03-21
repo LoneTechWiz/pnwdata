@@ -13,6 +13,7 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
     body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(30_000),
   });
+  if (!res.ok) throw new Error(`PnW API HTTP ${res.status}`);
   const json = await res.json();
   if (json.errors) throw new Error(json.errors[0].message);
   return json.data as T;
@@ -156,7 +157,7 @@ export async function GET(request: NextRequest) {
 
   const targets: WarTarget[] = allEnemyNations
     .filter(n => n.score >= minScore && n.score <= maxScore)
-    .filter(n => !atWarWith.has(n.id))
+    .filter(n => !atWarWith.has(Number(n.id)))
     .map(n => ({
       id: n.id,
       nation_name: n.nation_name,

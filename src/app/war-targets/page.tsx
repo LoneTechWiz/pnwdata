@@ -132,7 +132,7 @@ export default function WarTargetsPage() {
         {/* Score range banner */}
         {result && (
           <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl px-4 py-3 text-sm text-slate-300">
-            Score: <strong className="text-white">{fmt(result.yourScore)}</strong>
+            Score: <strong className="text-white">{fmt(Math.round(result.yourScore))}</strong>
             <span className="mx-3 text-slate-500">→</span>
             Attack range: <strong className="text-green-400">{fmt(result.minScore)}</strong>
             <span className="mx-1 text-slate-500">–</span>
@@ -215,7 +215,7 @@ export default function WarTargetsPage() {
                     </td>
                     <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{t.leader_name}</td>
                     <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{t.alliance_name}</td>
-                    <td className="px-3 py-2 text-slate-200 whitespace-nowrap">{fmt(t.score)}</td>
+                    <td className="px-3 py-2 text-slate-200 whitespace-nowrap">{fmt(Math.round(t.score))}</td>
                     <td className="px-3 py-2 text-slate-200">{t.num_cities}</td>
                     <td className="px-3 py-2 text-slate-200 font-medium">{fmt(t.avg_infra)}</td>
                     <td className="px-3 py-2 text-slate-300">{fmt(t.soldiers)}</td>
