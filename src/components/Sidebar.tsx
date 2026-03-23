@@ -1,20 +1,25 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield, Building2, Search, Clock, Calculator, Target, UserPlus, DollarSign, Crosshair, Lock, LockOpen } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield,
+  Building2, Search, Clock, Calculator, Target, UserPlus,
+  DollarSign, Crosshair, Flame, Radio, LogOut,
+} from "lucide-react";
 
 const nav = [
-  { label: "Members", href: "/members", icon: Users },
-  { label: "Applicants", href: "/applicants", icon: UserPlus },
-  { label: "Military", href: "/military", icon: Shield },
-  { label: "MMR Checker", href: "/mmr", icon: Target },
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
+  { label: "Conflict Stats", href: "/conflict", icon: Flame },
   { label: "City Build", href: "/optimizer", icon: Calculator },
 ];
 
 const hiddenNav = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Members", href: "/members", icon: Users },
+  { label: "Applicants", href: "/applicants", icon: UserPlus },
+  { label: "Military", href: "/military", icon: Shield },
+  { label: "MMR Checker", href: "/mmr", icon: Target },
   { label: "Infra & Land", href: "/infra", icon: Building2 },
   { label: "Wars", href: "/wars", icon: Swords },
   { label: "Bank", href: "/bank", icon: Landmark },
@@ -22,42 +27,32 @@ const hiddenNav = [
   { label: "Charts", href: "/charts", icon: BarChart2 },
   { label: "Inactive", href: "/inactive", icon: Clock },
   { label: "Explore", href: "/explore", icon: Search },
+  { label: "Need to Declare", href: "/slots", icon: Swords },
+  { label: "Command Center", href: "/command-center", icon: Radio },
 ];
 
-const STORAGE_KEY = "pnw_unlocked";
-const PASSWORD = "Yosotinydick";
+interface Me {
+  discordId: string;
+  username: string;
+  avatar: string | null;
+}
+
+function avatarUrl(me: Me): string | null {
+  if (!me.avatar) return null;
+  return `https://cdn.discordapp.com/avatars/${me.discordId}/${me.avatar}.png?size=32`;
+}
 
 export function Sidebar({ allianceName }: { allianceName?: string }) {
   const pathname = usePathname();
-  const [unlocked, setUnlocked] = useState(false);
-  const [showInput, setShowInput] = useState(false);
-  const [input, setInput] = useState("");
-  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    setUnlocked(localStorage.getItem(STORAGE_KEY) === "1");
-  }, []);
+  const { data: me } = useQuery<Me | null>({
+    queryKey: ["me"],
+    queryFn: () => fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)),
+    retry: false,
+    staleTime: Infinity,
+  });
 
-  function handleUnlock() {
-    if (input === PASSWORD) {
-      localStorage.setItem(STORAGE_KEY, "1");
-      setUnlocked(true);
-      setShowInput(false);
-      setInput("");
-      setError(false);
-    } else {
-      setError(true);
-      setInput("");
-    }
-  }
-
-  function handleLock() {
-    localStorage.removeItem(STORAGE_KEY);
-    setUnlocked(false);
-    setShowInput(false);
-    setInput("");
-    setError(false);
-  }
+  const isLoggedIn = !!me;
 
   return (
     <aside className="w-56 shrink-0 bg-[#161b2e] border-r border-[#2a3150] flex flex-col min-h-screen">
@@ -70,6 +65,7 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
           <p className="text-xs text-slate-400 truncate">{allianceName}</p>
         )}
       </div>
+
       <nav className="flex-1 p-3 space-y-1">
         {nav.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
@@ -78,9 +74,7 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
               key={href}
               href={href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                active
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+                active ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
               }`}
             >
               <Icon size={16} />
@@ -89,16 +83,14 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
           );
         })}
 
-        {unlocked && hiddenNav.map(({ label, href, icon: Icon }) => {
+        {isLoggedIn && hiddenNav.map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                active
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+                active ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
               }`}
             >
               <Icon size={16} />
@@ -108,29 +100,34 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
         })}
       </nav>
 
-      <div className="p-3 border-t border-[#2a3150] space-y-2">
-        {showInput && !unlocked && (
-          <div className="space-y-1">
-            <input
-              type="password"
-              value={input}
-              onChange={e => { setInput(e.target.value); setError(false); }}
-              onKeyDown={e => e.key === "Enter" && handleUnlock()}
-              placeholder="Password"
-              autoFocus
-              className={`w-full bg-[#0f1117] border rounded-lg text-white px-2 py-1 text-xs focus:outline-none ${error ? "border-red-500" : "border-[#2a3150] focus:border-blue-500"}`}
+      {isLoggedIn && me && (
+        <div className="p-3 border-t border-[#2a3150] flex items-center gap-2">
+          {avatarUrl(me) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl(me)!}
+              alt={me.username}
+              width={24}
+              height={24}
+              className="rounded-full"
             />
-            {error && <p className="text-red-400 text-xs">Wrong password</p>}
-          </div>
-        )}
-        <button
-          onClick={unlocked ? handleLock : () => setShowInput(v => !v)}
-          className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-400 transition-colors w-full"
-        >
-          {unlocked ? <LockOpen size={12} /> : <Lock size={12} />}
-          {unlocked ? "Lock hidden pages" : "Politics & War"}
-        </button>
-      </div>
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-[#2a3150] flex items-center justify-center text-xs text-slate-400">
+              {me.username[0].toUpperCase()}
+            </div>
+          )}
+          <span className="text-xs text-slate-400 flex-1 truncate">{me.username}</span>
+          <form action="/api/auth/logout" method="POST">
+            <button
+              type="submit"
+              title="Logout"
+              className="text-slate-600 hover:text-slate-300 transition-colors"
+            >
+              <LogOut size={14} />
+            </button>
+          </form>
+        </div>
+      )}
     </aside>
   );
 }
