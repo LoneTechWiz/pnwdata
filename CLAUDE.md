@@ -27,7 +27,7 @@ PnW GraphQL API + BK Net REST API
   React pages (useQuery → fetchMembers etc.)
 ```
 
-**Key insight**: All pages are purely client-side (`"use client"`) and fetch from the local `/api/data` route, never directly from PnW's API. The server-side sync loop is the only thing that touches external APIs.
+**Key insight**: Most pages are purely client-side (`"use client"`) and fetch from the local `/api/data` route. **Exception**: `/api/warTargets`, `/api/conflictStats`, and `/api/beigeWatch` call the PnW GraphQL API directly on each request (no SQLite cache) — these are live-data routes. The server-side sync loop handles all other external API access.
 
 ### Core Files
 
@@ -39,6 +39,11 @@ PnW GraphQL API + BK Net REST API
 | `src/instrumentation.ts` | Calls `startSyncLoop()` on server boot (Node.js runtime only) |
 | `src/app/api/data/route.ts` | `GET ?type=<table>` — reads SQLite, returns JSON |
 | `src/app/api/sync/route.ts` | `POST` triggers manual sync; `GET` returns status |
+| `src/app/api/warTargets/route.ts` | Calls PnW GraphQL directly; no SQLite cache |
+| `src/app/api/conflictStats/route.ts` | Calls PnW GraphQL directly; no SQLite cache |
+| `src/app/api/beigeWatch/route.ts` | Calls PnW GraphQL directly; no SQLite cache |
+| `src/lib/session.ts` | JWT session helpers (HS256 via `jose`); reads `SESSION_SECRET` |
+| `src/lib/role-config.ts` | Reads/writes `data/role-config.json`; `hasAccess()` checks Discord role IDs |
 
 ### Database Tables
 
@@ -66,11 +71,35 @@ All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEG
 - **BK Net ID map keys**: Always use `String(m.nation.id)` when building maps and `String(m.id)` when looking up — BK Net IDs arrive as strings at runtime despite TypeScript typing them as `number`.
 - **Nation resource fields**: `money`, `gasoline`, `munitions`, `steel`, `aluminum` are fetched from the PnW GraphQL API and stored in the `nations` table — these reflect stockpile on the nation, not the alliance bank. Do not use BK Net `resources` for these, as BK Net includes alliance account funds.
 
+### Auth & Access Control
+
+Discord OAuth flow: `/api/auth/login` → Discord → `/api/auth/callback` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`.
+
+- `isEmperor`: Discord username matches `DISCORD_ADMIN_ROLE` env var (default `"Emperor"`)
+- Per-page role access: `data/role-config.json` maps route paths to allowed Discord role ID arrays; managed via `/role-config` UI
+- `hasAccess(config, pathname, roleIds)` in `src/lib/role-config.ts` is the access check
+
+### Sidebar Nav Structure
+
+The sidebar has three tiers:
+- **Public nav** (`nav` array in `Sidebar.tsx`): War Targets, Conflict Stats, City Build — visible to all
+- **Member nav** (`hiddenNav` array): all other pages — visible only when Discord-authenticated (`isLoggedIn`)
+- **Admin nav**: Role Config — visible only when `me.canManageRoles` (Emperor or has the role-config Discord role)
+
+**Adding a new member page requires changes in three places:**
+1. `src/components/Sidebar.tsx` — add entry to `hiddenNav`
+2. `data/role-config.json` — add route with allowed role ID array (use `git add -f data/role-config.json` since `data/` is in `.gitignore`)
+3. `src/app/role-config/page.tsx` — add route to the `ALL_PAGES` constant
+
 ### Pages
 
 | Route | Description |
 |-------|-------------|
-| `/` | Dashboard |
+| `/` | Landing page with links to War Targets and City Build |
+| `/dashboard` | Alliance overview — member counts, military totals, active wars, top members by score |
+| `/war-targets` | War target finder — fetches live from PnW API using `data/war-config.json` enemy IDs |
+| `/conflict` | Conflict stats — damage inflicted/received per alliance/nation for the current war |
+| `/slots` | Need to Declare — members with fewer than N offensive wars, active in last 72h, not in VM |
 | `/members` | Alliance member list with military stats |
 | `/applicants` | Pending applicants sorted by last active |
 | `/military` | Military overview |
@@ -83,6 +112,9 @@ All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEG
 | `/inactive` | Inactive members |
 | `/optimizer` | City Build Optimizer |
 | `/explore` | Explore nations |
+| `/command-center` | Per-nation war viewer — select a member to see their active wars with resistance/points/unit counts |
+| `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
+| `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
 
 ### External APIs
 
@@ -97,14 +129,24 @@ All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEG
 ### Environment Variables
 
 ```
-PNW_API_KEY=        # Politics and War API key
-BKNET_API_TOKEN=    # BK Net API token (optional; BK Net features disabled if absent)
+PNW_API_KEY=           # Politics and War API key
+BKNET_API_TOKEN=       # BK Net API token (optional; BK Net features disabled if absent)
+SESSION_SECRET=        # JWT signing secret, min 32 chars
+DISCORD_CLIENT_ID=     # Discord OAuth app client ID
+DISCORD_CLIENT_SECRET= # Discord OAuth app client secret
+DISCORD_REDIRECT_URI=  # Full callback URL, e.g. https://example.com/api/auth/callback
+DISCORD_GUILD_ID=      # Discord server ID for member/role lookup
+DISCORD_ADMIN_ROLE=    # Username that grants isEmperor (default: "Emperor")
 ```
 
 ### Key Config
 
 - `next.config.ts` must keep `serverExternalPackages: ['better-sqlite3']`
 - SQLite DB at `data/pnw.db` — excluded from git
+- `data/role-config.json` — maps page paths to allowed Discord role ID arrays; managed via `/role-config` UI; **not** excluded from git
+- `data/war-config.json` — runtime config for war features; **not** excluded from git. Edit this file to update enemy/ally alliance lists:
+  - `enemy_alliance_ids: number[]` — enemy alliance IDs; fetched live by `/api/warTargets` and `/api/conflictStats`
+  - `ally_alliance_ids: number[]` — ally alliance IDs; used by `/api/conflictStats` to label each coalition side
 
 ### Deployment Notes
 
