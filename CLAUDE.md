@@ -73,7 +73,7 @@ All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEG
 
 ### Auth & Access Control
 
-Discord OAuth flow: `/login` page (Turnstile captcha) → POST `/api/auth/discord` → Discord → `/api/auth/callback` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`.
+Discord OAuth flow: `/api/auth/discord` → Discord → `/api/auth/callback` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`.
 
 - `isEmperor`: Discord username matches `DISCORD_ADMIN_ROLE` env var (default `"Emperor"`)
 - Per-page role access: `data/role-config.json` maps route paths to allowed Discord role ID arrays; managed via `/role-config` UI
@@ -137,8 +137,6 @@ DISCORD_CLIENT_SECRET= # Discord OAuth app client secret
 DISCORD_REDIRECT_URI=  # Full callback URL, e.g. https://example.com/api/auth/callback
 DISCORD_GUILD_ID=      # Discord server ID for member/role lookup
 DISCORD_ADMIN_ROLE=    # Username that grants isEmperor (default: "Emperor")
-NEXT_PUBLIC_TURNSTILE_SITE_KEY= # Cloudflare Turnstile site key (required at build time)
-TURNSTILE_SECRET_KEY=           # Cloudflare Turnstile secret key (required at runtime)
 ```
 
 ### Key Config
@@ -153,7 +151,6 @@ TURNSTILE_SECRET_KEY=           # Cloudflare Turnstile secret key (required at r
 ### Deployment Notes
 
 - The app runs in **production mode** (`next start`), not dev mode
-- **Before building**: ensure `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is set — it is inlined at build time and cannot be changed without a rebuild.
 - After any code change: `npm run build` then restart the server:
   ```bash
   kill -9 $(ss -tlnp | grep ':3000' | grep -oP 'pid=\K[0-9]+')
