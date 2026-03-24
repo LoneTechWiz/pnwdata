@@ -249,6 +249,13 @@ export default function BeigeWatchPage() {
           </div>
         )}
 
+        {/* Result count — shown when no nationId (score banner not visible) */}
+        {!loading && result && !result.yourScore && displayedNations.length > 0 && (
+          <p className="text-sm text-slate-400">
+            {displayedNations.length} nation{displayedNations.length === 1 ? "" : "s"} on beige
+          </p>
+        )}
+
         {/* Loading */}
         {loading && (
           <div className="flex justify-center py-12">
