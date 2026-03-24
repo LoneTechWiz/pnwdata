@@ -19,8 +19,18 @@ client.on("ready", () => {
 
 client.on("messageCreate", (message) => {
   if (message.author.bot) return;
-  if (message.content.toLowerCase() === "ayy") {
+  const content = message.content.toLowerCase().trim();
+
+  if (content === "ayy") {
     message.reply("lmao");
+  } else if (content.includes("grok")) {
+    message.reply(`There is no Grok, only ${client.user.username}`);
+  } else if (content === "summarize this" || content === "summarise this") {
+    message.reply("Learn to read ayy lmao");
+  } else if (content === "ayylah give me wisdom") {
+    message.reply("You didn't ask me how to use it, now you have arrested development");
+  } else if (content === "ayylah grant me a wish") {
+    message.reply("Wish you'd ayy lmaout of my face, I'm not a jinn");
   }
 });
 
