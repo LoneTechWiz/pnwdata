@@ -71,16 +71,17 @@ export default function BeigeWatchPage() {
     return nations.sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
+
+      // Special-case inRange (boolean | null) — must come before generic null guards
+      if (sortKey === "inRange") {
+        const toNum = (v: unknown) => v === true ? 1 : v === false ? 0 : -1;
+        const cmp = toNum(av) - toNum(bv);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
-
-      // Special-case inRange (boolean | null) — generic number subtraction produces NaN
-      if (sortKey === "inRange") {
-        const toNum = (v: boolean | null) => v === true ? 1 : v === false ? 0 : -1;
-        const cmp = toNum(av as boolean | null) - toNum(bv as boolean | null);
-        return sortDir === "asc" ? cmp : -cmp;
-      }
 
       const cmp = typeof av === "string"
         ? (av as string).localeCompare(bv as string)
