@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield,
   Building2, Search, Clock, Calculator, Target, UserPlus,
-  DollarSign, Crosshair, Flame, Radio, LogOut,
+  DollarSign, Crosshair, Flame, Radio, LogOut, Settings, ShieldOff,
 } from "lucide-react";
 
 const nav = [
@@ -29,12 +29,16 @@ const hiddenNav = [
   { label: "Explore", href: "/explore", icon: Search },
   { label: "Need to Declare", href: "/slots", icon: Swords },
   { label: "Command Center", href: "/command-center", icon: Radio },
+  { label: "Beige Watch", href: "/beige-watch", icon: ShieldOff },
 ];
 
 interface Me {
   discordId: string;
   username: string;
   avatar: string | null;
+  isEmperor: boolean;
+  canManageRoles: boolean;
+  accessiblePages: string[];
 }
 
 function avatarUrl(me: Me): string | null {
@@ -57,10 +61,10 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
   return (
     <aside className="w-56 shrink-0 bg-[#161b2e] border-r border-[#2a3150] flex flex-col min-h-screen">
       <div className="p-5 border-b border-[#2a3150]">
-        <div className="flex items-center gap-2 mb-1">
+        <Link href="/" className="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
           <Shield size={20} className="text-blue-400" />
           <span className="font-bold text-white text-sm">PnW Analytics</span>
-        </div>
+        </Link>
         {allianceName && (
           <p className="text-xs text-slate-400 truncate">{allianceName}</p>
         )}
@@ -83,7 +87,7 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
           );
         })}
 
-        {isLoggedIn && hiddenNav.map(({ label, href, icon: Icon }) => {
+        {isLoggedIn && hiddenNav.filter(({ href }) => me?.accessiblePages.includes(href)).map(({ label, href, icon: Icon }) => {
           const active = pathname === href;
           return (
             <Link
@@ -98,6 +102,18 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
             </Link>
           );
         })}
+
+        {me?.canManageRoles && (
+          <Link
+            href="/role-config"
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              pathname === "/role-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+            }`}
+          >
+            <Settings size={16} />
+            Role Config
+          </Link>
+        )}
       </nav>
 
       {isLoggedIn && me && (
