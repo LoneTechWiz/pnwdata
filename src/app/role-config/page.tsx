@@ -1,10 +1,11 @@
 // src/app/role-config/page.tsx
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
-import { Save } from "lucide-react";
+import { Save, X, ChevronDown } from "lucide-react";
 
 interface GuildRole {
   id: string;
@@ -19,12 +20,110 @@ interface RoleConfig {
 const ALL_PAGES = [
   "/dashboard", "/members", "/applicants", "/military", "/mmr",
   "/infra", "/wars", "/bank", "/cashholders", "/charts",
-  "/inactive", "/explore", "/slots", "/command-center",
+  "/inactive", "/explore", "/slots", "/command-center", "/beige-watch", "/role-config",
 ];
 
 function roleColor(color: number): string {
   if (color === 0) return "#94a3b8";
   return `#${color.toString(16).padStart(6, "0")}`;
+}
+
+function RoleChip({ role, onRemove }: { role: GuildRole; onRemove: () => void }) {
+  const color = roleColor(role.color);
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border"
+      style={{ color, borderColor: `${color}40`, backgroundColor: `${color}18` }}
+    >
+      {role.name}
+      <button onClick={onRemove} className="hover:opacity-70 transition-opacity ml-0.5">
+        <X size={10} />
+      </button>
+    </span>
+  );
+}
+
+function RoleDropdown({
+  available,
+  onAdd,
+}: {
+  available: GuildRole[];
+  onAdd: (role: GuildRole) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, openUp: false });
+
+  const filtered = available.filter((r) =>
+    r.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function handleOpen() {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < 260;
+      setDropPos({ top: openUp ? rect.top : rect.bottom + 4, left: rect.left, openUp });
+    }
+    setSearch("");
+    setOpen(true);
+  }
+
+  if (available.length === 0) return null;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={handleOpen}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-slate-400 border border-dashed border-[#2a3150] hover:border-slate-500 hover:text-slate-300 transition-colors"
+      >
+        Add role <ChevronDown size={10} />
+      </button>
+      {open && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-50 bg-[#1e2540] border border-[#2a3150] rounded-lg shadow-xl w-52"
+            style={
+              dropPos.openUp
+                ? { bottom: window.innerHeight - dropPos.top + 4, left: dropPos.left }
+                : { top: dropPos.top, left: dropPos.left }
+            }
+          >
+            <div className="p-2 border-b border-[#2a3150]">
+              <input
+                autoFocus
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search roles…"
+                className="w-full bg-[#0f1117] border border-[#2a3150] rounded px-2 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="max-h-48 overflow-y-auto py-1">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-slate-500">No roles found</p>
+              ) : (
+                filtered.map((role) => (
+                  <button
+                    key={role.id}
+                    onClick={() => { onAdd(role); setOpen(false); }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#2a3150] transition-colors"
+                    style={{ color: roleColor(role.color) }}
+                  >
+                    {role.name}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
+  );
 }
 
 export default function RoleConfigPage() {
@@ -47,6 +146,10 @@ export default function RoleConfigPage() {
     return roleConfig?.pages ?? {};
   }, [localConfig, roleConfig]);
 
+  const roleById = useMemo(() => {
+    return Object.fromEntries(guildRoles.map((r) => [r.id, r]));
+  }, [guildRoles]);
+
   const saveMutation = useMutation({
     mutationFn: (pages: Record<string, string[]>) =>
       fetch("/api/auth/role-config", {
@@ -60,12 +163,15 @@ export default function RoleConfigPage() {
     },
   });
 
-  function toggleRole(page: string, roleId: string) {
+  function addRole(page: string, role: GuildRole) {
     const current = activeConfig[page] ?? [];
-    const next = current.includes(roleId)
-      ? current.filter((id) => id !== roleId)
-      : [...current, roleId];
-    setLocalConfig({ ...activeConfig, [page]: next });
+    if (current.includes(role.id)) return;
+    setLocalConfig({ ...activeConfig, [page]: [...current, role.id] });
+  }
+
+  function removeRole(page: string, roleId: string) {
+    const current = activeConfig[page] ?? [];
+    setLocalConfig({ ...activeConfig, [page]: current.filter((id) => id !== roleId) });
   }
 
   const isLoading = rolesLoading || configLoading;
@@ -102,39 +208,33 @@ export default function RoleConfigPage() {
           </div>
         )}
 
-        <div className="rounded-xl border border-[#2a3150] overflow-x-auto">
-          <table className="w-full text-sm text-white min-w-max">
-            <thead className="bg-[#161b2e] text-slate-400 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3 text-left">Page</th>
-                {guildRoles.map((role) => (
-                  <th key={role.id} className="px-3 py-3 text-center whitespace-nowrap">
-                    <span style={{ color: roleColor(role.color) }}>{role.name}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#2a3150]">
-              {ALL_PAGES.map((page) => (
-                <tr key={page} className="hover:bg-[#1e2540] transition-colors">
-                  <td className="px-4 py-2 font-mono text-slate-300">{page}</td>
-                  {guildRoles.map((role) => {
-                    const checked = (activeConfig[page] ?? []).includes(role.id);
-                    return (
-                      <td key={role.id} className="px-3 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleRole(page, role.id)}
-                          className="w-4 h-4 accent-blue-500 cursor-pointer"
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-xl border border-[#2a3150] overflow-hidden">
+          {ALL_PAGES.map((page, i) => {
+            const allowedIds = activeConfig[page] ?? [];
+            const allowedRoles = allowedIds.map((id) => roleById[id]).filter(Boolean);
+            const availableRoles = guildRoles.filter((r) => !allowedIds.includes(r.id));
+
+            return (
+              <div
+                key={page}
+                className={`flex items-center gap-4 px-4 py-3 ${
+                  i !== ALL_PAGES.length - 1 ? "border-b border-[#2a3150]" : ""
+                } hover:bg-[#1a1f35] transition-colors`}
+              >
+                <span className="font-mono text-slate-300 text-sm w-40 shrink-0">{page}</span>
+                <div className="flex items-center gap-2 flex-wrap flex-1">
+                  {allowedRoles.map((role) => (
+                    <RoleChip
+                      key={role.id}
+                      role={role}
+                      onRemove={() => removeRole(page, role.id)}
+                    />
+                  ))}
+                  <RoleDropdown available={availableRoles} onAdd={(role) => addRole(page, role)} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </AppShell>
