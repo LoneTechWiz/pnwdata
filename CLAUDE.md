@@ -73,7 +73,7 @@ All rows store JSON blobs in a `data TEXT` column alongside an `updated_at INTEG
 
 ### Auth & Access Control
 
-Discord OAuth flow: `/api/auth/login` → Discord → `/api/auth/callback` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`.
+Discord OAuth flow: `/login` page (Turnstile captcha) → POST `/api/auth/discord` → Discord → `/api/auth/callback` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`.
 
 - `isEmperor`: Discord username matches `DISCORD_ADMIN_ROLE` env var (default `"Emperor"`)
 - Per-page role access: `data/role-config.json` maps route paths to allowed Discord role ID arrays; managed via `/role-config` UI
