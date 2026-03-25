@@ -221,7 +221,7 @@ export async function GET() {
       const d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       const after = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} 00:00:00`;
       for (let page = 1; ; page++) {
-        if (page >= 20) break;
+        if (page > 20) break;
         const beigeData = await gql<{ wars: { data: BeigeWar[] } }>(BEIGE_WARS_QUERY, { ids: targetIds, after, page });
         for (const w of beigeData.wars.data) recordIfLoss(w);
         if (beigeData.wars.data.length < 500) break;
