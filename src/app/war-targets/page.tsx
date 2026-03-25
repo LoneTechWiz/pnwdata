@@ -1,9 +1,11 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { Crosshair, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Crosshair, ChevronUp, ChevronDown, ChevronsUpDown, Swords, Send } from "lucide-react";
 import type { WarTarget, WarTargetsResponse } from "@/app/api/warTargets/route";
+
+type SendStatus = "idle" | "sending" | "sent" | "error";
 
 type SortKey = keyof WarTarget;
 type SortDir = "asc" | "desc";
@@ -21,7 +23,6 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "nation_name", label: "Nation" },
-  { key: "leader_name", label: "Leader" },
   { key: "alliance_name", label: "Alliance" },
   { key: "score", label: "Score" },
   { key: "num_cities", label: "Cities" },
@@ -30,8 +31,10 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "tanks", label: "Tanks" },
   { key: "aircraft", label: "Aircraft" },
   { key: "ships", label: "Ships" },
+  { key: "offensive_wars_count", label: "Off Wars" },
   { key: "defensive_wars_count", label: "Def Wars" },
-  // Status column is non-sortable (composite of 3 badge conditions) — rendered separately below
+  { key: "beige_loot", label: "Beige Loot" },
+  { key: "beige_avg", label: "Avg Beige" },
 ];
 
 export default function WarTargetsPage() {
@@ -41,6 +44,28 @@ export default function WarTargetsPage() {
   const [result, setResult] = useState<WarTargetsResponse | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("avg_infra");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [canSendWarTargets, setCanSendWarTargets] = useState(false);
+  const [sendStatuses, setSendStatuses] = useState<Record<number, SendStatus>>({});
+
+  useEffect(() => {
+    const urlId = new URLSearchParams(window.location.search).get("nationId");
+    fetch("/api/auth/me")
+      .then(r => r.ok ? r.json() : null)
+      .then((me: { nationId?: number | null; canSendWarTargets?: boolean } | null) => {
+        if (me?.canSendWarTargets) setCanSendWarTargets(true);
+        if (urlId && Number.isInteger(Number(urlId)) && Number(urlId) > 0) {
+          setNationIdInput(urlId);
+          fetchTargets(Number(urlId));
+          return;
+        }
+        if (me?.nationId) {
+          setNationIdInput(String(me.nationId));
+          fetchTargets(me.nationId);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // All useMemo calls before any conditional returns (Rules of Hooks)
   const sorted = useMemo(() => {
@@ -48,6 +73,9 @@ export default function WarTargetsPage() {
     return [...result.targets].sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
       const cmp = typeof av === "string"
         ? (av as string).localeCompare(bv as string)
         : (av as number) - (bv as number);
@@ -64,28 +92,53 @@ export default function WarTargetsPage() {
     }
   }
 
-  async function handleFind() {
-    const id = Number(nationIdInput);
-    if (!Number.isInteger(id) || id <= 0) {
-      setError("Please enter a valid nation ID");
-      return;
+  async function handleSend(target: WarTarget) {
+    const nationId = Number(nationIdInput);
+    setSendStatuses(s => ({ ...s, [target.id]: "sending" }));
+    try {
+      const res = await fetch("/api/warTargets/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nation_id: nationId, target }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Error ${res.status}`);
+      }
+      setSendStatuses(s => ({ ...s, [target.id]: "sent" }));
+    } catch {
+      setSendStatuses(s => ({ ...s, [target.id]: "error" }));
     }
+  }
+
+  async function fetchTargets(id: number) {
     setLoading(true);
     setError(null);
     setResult(null);
+    setSendStatuses({});
     try {
       const res = await fetch(`/api/warTargets?nationId=${id}`);
-      const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Unknown error");
+        const ct = res.headers.get("content-type") ?? "";
+        const data = ct.includes("application/json") ? await res.json() : null;
+        setError(data?.error ?? `Server error (${res.status})`);
       } else {
-        setResult(data as WarTargetsResponse);
+        setResult(await res.json() as WarTargetsResponse);
       }
     } catch {
       setError("Network error — check your connection");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleFind() {
+    const id = Number(nationIdInput);
+    if (!Number.isInteger(id) || id <= 0) {
+      setError("Please enter a valid nation ID");
+      return;
+    }
+    fetchTargets(id);
   }
 
   return (
@@ -105,9 +158,16 @@ export default function WarTargetsPage() {
         {/* Input */}
         <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4 flex items-end gap-3 flex-wrap">
           <div className="flex flex-col gap-1">
-            <label htmlFor="nation-id-input" className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-              Your Nation ID
-            </label>
+            <div className="flex items-center gap-2">
+              <label htmlFor="nation-id-input" className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                Your Nation ID
+              </label>
+              {result && (
+                <span className="text-xs text-slate-300 font-medium">
+                  {result.yourLeader}{result.yourDiscord ? <span className="text-slate-500 ml-1">{result.yourDiscord}</span> : null}
+                </span>
+              )}
+            </div>
             <input
               id="nation-id-input"
               type="number"
@@ -180,6 +240,7 @@ export default function WarTargetsPage() {
             <table className="w-full text-sm">
               <thead className="bg-[#161b2e] border-b border-[#2a3150]">
                 <tr>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap"></th>
                   {COLUMNS.map(({ key, label }) => (
                     <th
                       key={key}
@@ -194,15 +255,44 @@ export default function WarTargetsPage() {
                       </span>
                     </th>
                   ))}
-                  {/* Status column is non-sortable — composite badge state */}
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap">
-                    Status
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2a3150]">
                 {sorted.map(t => (
                   <tr key={t.id} className="bg-[#161b2e] hover:bg-[#1e2540] transition-colors">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        <a
+                          href={`https://politicsandwar.com/nation/war/declare/id=${t.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-red-700/80 hover:bg-red-600 text-white text-xs font-semibold rounded transition-colors"
+                        >
+                          <Swords size={11} />
+                          War
+                        </a>
+                        {canSendWarTargets && result?.nationInAlliance && (() => {
+                          const status = sendStatuses[t.id] ?? "idle";
+                          return (
+                            <button
+                              onClick={() => handleSend(t)}
+                              disabled={status === "sending" || status === "sent"}
+                              title={status === "error" ? "Failed — click to retry" : "Send to nation via Discord DM"}
+                              className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded transition-colors disabled:cursor-not-allowed ${
+                                status === "sent"
+                                  ? "bg-green-700/80 text-white"
+                                  : status === "error"
+                                    ? "bg-orange-700/80 hover:bg-orange-600 text-white"
+                                    : "bg-[#2a3150] hover:bg-[#3a4160] text-slate-300"
+                              }`}
+                            >
+                              <Send size={10} className={status === "sending" ? "animate-pulse" : ""} />
+                              {status === "sent" ? "Sent" : status === "error" ? "Retry" : "Send"}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <a
                         href={`https://politicsandwar.com/nation/id=${t.id}`}
@@ -213,7 +303,6 @@ export default function WarTargetsPage() {
                         {t.nation_name}
                       </a>
                     </td>
-                    <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{t.leader_name}</td>
                     <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{t.alliance_name}</td>
                     <td className="px-3 py-2 text-slate-200 whitespace-nowrap">{fmt(Math.round(t.score))}</td>
                     <td className="px-3 py-2 text-slate-200">{t.num_cities}</td>
@@ -222,29 +311,27 @@ export default function WarTargetsPage() {
                     <td className="px-3 py-2 text-slate-300">{fmt(t.tanks)}</td>
                     <td className="px-3 py-2 text-slate-300">{fmt(t.aircraft)}</td>
                     <td className="px-3 py-2 text-slate-300">{fmt(t.ships)}</td>
+                    <td className="px-3 py-2 text-slate-200">{t.offensive_wars_count}</td>
                     <td className="px-3 py-2">
                       <span className={`font-medium ${t.defensive_wars_count >= 3 ? "text-orange-400" : "text-slate-200"}`}>
                         {t.defensive_wars_count}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1 flex-wrap">
-                        {t.defensive_wars_count >= 3 && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-orange-900/40 text-orange-400 border border-orange-700/30">
-                            Slotted
-                          </span>
-                        )}
-                        {t.beige_turns > 0 && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-900/40 text-yellow-400 border border-yellow-700/30">
-                            Beige
-                          </span>
-                        )}
-                        {t.vacation_mode_turns > 0 && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 border border-slate-600/30">
-                            VM
-                          </span>
-                        )}
-                      </div>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {t.beige_loot != null ? (
+                        <div>
+                          <div className="text-green-400 font-medium">${fmt(Math.round(t.beige_loot))}</div>
+                          {t.beige_date && <div className="text-slate-500 text-xs">{new Date(t.beige_date).toLocaleDateString()}</div>}
+                        </div>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {t.beige_avg != null ? (
+                        <div>
+                          <div className="text-green-300 font-medium">${fmt(t.beige_avg)}</div>
+                          <div className="text-slate-500 text-xs">{t.beige_count} war{t.beige_count === 1 ? "" : "s"}</div>
+                        </div>
+                      ) : <span className="text-slate-600">—</span>}
                     </td>
                   </tr>
                 ))}
