@@ -81,7 +81,6 @@ export default function AiTargetsPage() {
     data,
     isLoading: analysisLoading,
     error,
-    refetch,
   } = useQuery<AiTargetsResponse>({
     queryKey: ["aiTargets", fetchKey],
     queryFn: async () => {
@@ -102,7 +101,6 @@ export default function AiTargetsPage() {
       setTriggered(true);
     } else {
       setFetchKey(k => k + 1);
-      refetch();
     }
   }
 
@@ -191,7 +189,7 @@ export default function AiTargetsPage() {
                 title="⚔ Max Damage"
                 accent="border-red-500/30"
                 statLabel="Avg Infra"
-                statValue={p => p.avg_infra.toLocaleString()}
+                statValue={p => p.avg_infra != null ? p.avg_infra.toLocaleString() : "—"}
               />
               <PickCard
                 picks={data.loot_picks}
