@@ -5,31 +5,35 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield,
   Building2, Search, Clock, Calculator, Target, UserPlus,
-  DollarSign, Crosshair, Flame, Radio, LogOut, Settings, ShieldOff,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Brain,
 } from "lucide-react";
 
 const nav = [
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
-  { label: "Conflict Stats", href: "/conflict", icon: Flame },
   { label: "City Build", href: "/optimizer", icon: Calculator },
 ];
 
 const hiddenNav = [
+  // Overview
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Charts", href: "/charts", icon: BarChart2 },
+  // Members
   { label: "Members", href: "/members", icon: Users },
   { label: "Applicants", href: "/applicants", icon: UserPlus },
-  { label: "Military", href: "/military", icon: Shield },
-  { label: "MMR Checker", href: "/mmr", icon: Target },
-  { label: "Infra & Land", href: "/infra", icon: Building2 },
-  { label: "Wars", href: "/wars", icon: Swords },
-  { label: "Bank", href: "/bank", icon: Landmark },
-  { label: "Stockpile", href: "/cashholders", icon: DollarSign },
-  { label: "Charts", href: "/charts", icon: BarChart2 },
   { label: "Inactive", href: "/inactive", icon: Clock },
   { label: "Explore", href: "/explore", icon: Search },
+  // Military & War
+  { label: "Military", href: "/military", icon: Shield },
+  { label: "MMR Checker", href: "/mmr", icon: Target },
+  { label: "Wars", href: "/wars", icon: Swords },
   { label: "Need to Declare", href: "/slots", icon: Swords },
   { label: "Command Center", href: "/command-center", icon: Radio },
   { label: "Beige Watch", href: "/beige-watch", icon: ShieldOff },
+  { label: "AI Targets", href: "/ai-targets", icon: Brain },
+  // Economy
+  { label: "Infra & Land", href: "/infra", icon: Building2 },
+  { label: "Bank", href: "/bank", icon: Landmark },
+  { label: "Stockpile", href: "/cashholders", icon: DollarSign },
 ];
 
 interface Me {
@@ -59,7 +63,7 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
   const isLoggedIn = !!me;
 
   return (
-    <aside className="w-56 shrink-0 bg-[#161b2e] border-r border-[#2a3150] flex flex-col min-h-screen">
+    <aside className="w-56 shrink-0 bg-[#161b2e] border-r border-[#2a3150] flex flex-col sticky top-0 h-screen overflow-y-auto">
       <div className="p-5 border-b border-[#2a3150]">
         <Link href="/" className="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
           <Shield size={20} className="text-blue-400" />
@@ -104,17 +108,40 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
         })}
 
         {me?.canManageRoles && (
-          <Link
-            href="/role-config"
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-              pathname === "/role-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-            }`}
-          >
-            <Settings size={16} />
-            Role Config
-          </Link>
+          <>
+            <Link
+              href="/role-config"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                pathname === "/role-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+              }`}
+            >
+              <Settings size={16} />
+              Role Config
+            </Link>
+            <Link
+              href="/war-config"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                pathname === "/war-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+              }`}
+            >
+              <Swords size={16} />
+              War Config
+            </Link>
+          </>
         )}
       </nav>
+
+      {!isLoggedIn && (
+        <div className="p-3 border-t border-[#2a3150]">
+          <a
+            href="/login"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-[#1e2540] hover:text-white transition-colors w-full"
+          >
+            <LogIn size={16} />
+            Login with Discord
+          </a>
+        </div>
+      )}
 
       {isLoggedIn && me && (
         <div className="p-3 border-t border-[#2a3150] flex items-center gap-2">
