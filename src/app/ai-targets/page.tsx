@@ -69,6 +69,7 @@ function PickCard({
 export default function AiTargetsPage() {
   const [triggered, setTriggered] = useState(false);
   const [fetchKey, setFetchKey] = useState(0);
+  const [nationIdInput, setNationIdInput] = useState("");
 
   const { data: me, isLoading: meLoading } = useQuery<Me | null>({
     queryKey: ["me"],
@@ -82,9 +83,12 @@ export default function AiTargetsPage() {
     isLoading: analysisLoading,
     error,
   } = useQuery<AiTargetsResponse>({
-    queryKey: ["aiTargets", fetchKey],
+    queryKey: ["aiTargets", fetchKey, nationIdInput.trim()],
     queryFn: async () => {
-      const res = await fetch("/api/aiTargets");
+      const url = nationIdInput.trim()
+        ? `/api/aiTargets?nation_id=${encodeURIComponent(nationIdInput.trim())}`
+        : "/api/aiTargets";
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Server error (${res.status})`);
@@ -147,12 +151,22 @@ export default function AiTargetsPage() {
         )}
 
         {me && !triggered && !data && (
-          <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-8 text-center space-y-3">
+          <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-8 text-center space-y-4">
             <Brain size={32} className="text-purple-400 mx-auto" />
             <p className="text-slate-400 text-sm">
               Fetches all valid targets in your score range and asks AI to pick the best 5 for damage and loot.
               Takes about a minute.
             </p>
+            <div className="flex items-center justify-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={nationIdInput}
+                onChange={e => setNationIdInput(e.target.value)}
+                placeholder="Nation ID (optional)"
+                className="bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 w-48 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+            </div>
             <button
               onClick={handleAnalyze}
               className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"

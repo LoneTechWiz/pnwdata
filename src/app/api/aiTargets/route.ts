@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
 import db from "@/lib/db";
@@ -104,7 +104,7 @@ interface TargetData {
   beige_count: number | null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!process.env.PNW_API_KEY) {
     return NextResponse.json({ error: "PNW_API_KEY is not configured" }, { status: 500 });
   }
@@ -114,20 +114,30 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const nationRow = db.prepare(`
-    SELECT id FROM nations WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?)
-    UNION
-    SELECT id FROM applicants WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?)
-    LIMIT 1
-  `).get(session.username, session.username) as { id: number } | undefined;
+  let nationId: number;
+  const nationIdParam = request.nextUrl.searchParams.get("nation_id");
+  if (nationIdParam) {
+    const parsed = Number(nationIdParam);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return NextResponse.json({ error: "Invalid nation_id" }, { status: 400 });
+    }
+    nationId = parsed;
+  } else {
+    const nationRow = db.prepare(`
+      SELECT id FROM nations WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?)
+      UNION
+      SELECT id FROM applicants WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?)
+      LIMIT 1
+    `).get(session.username, session.username) as { id: number } | undefined;
 
-  if (!nationRow) {
-    return NextResponse.json(
-      { error: "Your Discord username isn't linked to a PnW nation. Make sure your in-game Discord field matches your Discord username." },
-      { status: 404 }
-    );
+    if (!nationRow) {
+      return NextResponse.json(
+        { error: "Your Discord username isn't linked to a PnW nation. Make sure your in-game Discord field matches your Discord username." },
+        { status: 404 }
+      );
+    }
+    nationId = nationRow.id;
   }
-  const nationId = nationRow.id;
 
   let enemyAllianceIds: number[];
   try {
