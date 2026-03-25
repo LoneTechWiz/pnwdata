@@ -33,7 +33,7 @@ async function gql<T>(query: string, variables?: Record<string, unknown>, retrie
 }
 
 const NATION_SCORE_QUERY = `
-  query($id:[Int]) { nations(id:$id) { data { score leader_name } } }
+  query($id:[Int]) { nations(id:$id) { data { nation_name score leader_name } } }
 `;
 const OFFENSIVE_WARS_QUERY = `
   query($attid:[Int]) { wars(attid:$attid, active:true) { data { def_id } } }
@@ -150,17 +150,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "war-config.json not found or invalid" }, { status: 500 });
   }
 
+  const discordRow = db.prepare(`
+    SELECT json_extract(data, '$.discord') as discord FROM nations WHERE id = ?
+    UNION
+    SELECT json_extract(data, '$.discord') as discord FROM applicants WHERE id = ?
+    LIMIT 1
+  `).get(nationId, nationId) as { discord: string | null } | undefined;
+  const nationDiscord = discordRow?.discord ?? null;
+
   let yourScore: number;
+  let yourNationName: string;
+  let yourLeaderName: string;
   let atWarWith: Set<number>;
   try {
     const [nationData, warsData] = await Promise.all([
-      gql<{ nations: { data: { score: number }[] } }>(NATION_SCORE_QUERY, { id: [nationId] }),
+      gql<{ nations: { data: { nation_name: string; score: number; leader_name: string }[] } }>(NATION_SCORE_QUERY, { id: [nationId] }),
       gql<{ wars: { data: { def_id: number }[] } }>(OFFENSIVE_WARS_QUERY, { attid: [nationId] }),
     ]);
     if (!nationData.nations.data[0]) {
       return NextResponse.json({ error: `Nation #${nationId} not found` }, { status: 404 });
     }
     yourScore = nationData.nations.data[0].score;
+    yourNationName = nationData.nations.data[0].nation_name;
+    yourLeaderName = nationData.nations.data[0].leader_name;
     atWarWith = new Set(warsData.wars.data.map(w => Number(w.def_id)));
   } catch (err) {
     return NextResponse.json(
@@ -168,6 +180,13 @@ export async function GET(request: NextRequest) {
       { status: 502 }
     );
   }
+
+  const nationInfo: import("@/lib/aiTargets").NationInfo = {
+    nation_id: nationId,
+    nation_name: yourNationName,
+    leader_name: yourLeaderName,
+    discord: nationDiscord,
+  };
 
   const minScore = Math.floor(yourScore * 0.75);
   const maxScore = Math.ceil(yourScore * 4 / 3);
@@ -268,6 +287,7 @@ export async function GET(request: NextRequest) {
       loot_picks: [],
       summary: "No valid targets found in your score range.",
       target_count: 0,
+      nation_info: nationInfo,
     } satisfies AiTargetsResponse);
   }
 
@@ -350,5 +370,6 @@ export async function GET(request: NextRequest) {
     loot_picks: enrichPicks(aiResult.loot_picks),
     summary: aiResult.summary ?? "",
     target_count: targets.length,
+    nation_info: nationInfo,
   } satisfies AiTargetsResponse);
 }

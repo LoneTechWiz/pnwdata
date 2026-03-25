@@ -14,9 +14,17 @@ export interface AiPick {
   reason: string;
 }
 
+export interface NationInfo {
+  nation_id: number;
+  nation_name: string;
+  leader_name: string;
+  discord: string | null;
+}
+
 export interface AiTargetsResponse {
   damage_picks: AiPick[];
   loot_picks: AiPick[];
   summary: string;
   target_count: number;
+  nation_info: NationInfo;
 }
