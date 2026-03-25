@@ -290,14 +290,14 @@ export async function GET() {
     ollamaContent = ollamaJson?.message?.content ?? "";
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const isNetwork = msg.includes("ECONNREFUSED") || msg.includes("fetch failed") || msg.includes("Ollama HTTP");
+    const isNetwork = msg.includes("ECONNREFUSED") || msg.includes("fetch failed") || msg.includes("Ollama HTTP") || msg.includes("operation was aborted") || (err instanceof DOMException && err.name === "TimeoutError");
     return NextResponse.json(
       { error: isNetwork ? "AI service unavailable — is Ollama running?" : `AI error: ${msg}` },
       { status: 502 }
     );
   }
 
-  if (ollamaContent.includes("<think>")) {
+  if (ollamaContent.trimStart().startsWith("<think>")) {
     ollamaContent = ollamaContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
   }
 
