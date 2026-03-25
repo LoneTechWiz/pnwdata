@@ -115,7 +115,7 @@ export default function AiTargetsPage() {
   return (
     <AppShell>
       <div className="p-6 space-y-6">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
               <Brain size={20} className="text-purple-400" />
@@ -125,15 +125,27 @@ export default function AiTargetsPage() {
               AI-powered picks for maximum damage and maximum loot.
             </p>
           </div>
-          {data && (
-            <button
-              onClick={handleAnalyze}
-              disabled={analysisLoading}
-              className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-300 border border-[#2a3150] hover:border-slate-500 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
-            >
-              <RefreshCw size={12} className={analysisLoading ? "animate-spin" : ""} />
-              Re-analyze
-            </button>
+          {me && (
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="number"
+                min={1}
+                value={nationIdInput}
+                onChange={e => setNationIdInput(e.target.value)}
+                placeholder="Nation ID (optional)"
+                className="bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 w-44 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              {data && (
+                <button
+                  onClick={handleAnalyze}
+                  disabled={analysisLoading}
+                  className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-300 border border-[#2a3150] hover:border-slate-500 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw size={12} className={analysisLoading ? "animate-spin" : ""} />
+                  Re-analyze
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -157,16 +169,6 @@ export default function AiTargetsPage() {
               Fetches all valid targets in your score range and asks AI to pick the best 5 for damage and loot.
               Takes about a minute.
             </p>
-            <div className="flex items-center justify-center gap-2">
-              <input
-                type="number"
-                min={1}
-                value={nationIdInput}
-                onChange={e => setNationIdInput(e.target.value)}
-                placeholder="Nation ID (optional)"
-                className="bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 w-48 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-            </div>
             <button
               onClick={handleAnalyze}
               className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors"
