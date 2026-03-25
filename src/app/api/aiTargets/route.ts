@@ -9,17 +9,27 @@ export const dynamic = "force-dynamic";
 
 const PNW_API = "https://api.politicsandwar.com/graphql";
 
-async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`${PNW_API}?api_key=${process.env.PNW_API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) throw new Error(`PnW API HTTP ${res.status}`);
-  const json = await res.json();
-  if (json.errors) throw new Error(json.errors[0].message);
-  return json.data as T;
+async function gql<T>(query: string, variables?: Record<string, unknown>, retries = 3): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(`${PNW_API}?api_key=${process.env.PNW_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.status === 429) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+      throw new Error("PnW API rate limited (429) — try again in a moment");
+    }
+    if (!res.ok) throw new Error(`PnW API HTTP ${res.status}`);
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0].message);
+    return json.data as T;
+  }
+  throw new Error("PnW API request failed after retries");
 }
 
 const NATION_SCORE_QUERY = `
@@ -211,6 +221,7 @@ export async function GET() {
       const d = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
       const after = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} 00:00:00`;
       for (let page = 1; ; page++) {
+        if (page >= 20) break;
         const beigeData = await gql<{ wars: { data: BeigeWar[] } }>(BEIGE_WARS_QUERY, { ids: targetIds, after, page });
         for (const w of beigeData.wars.data) recordIfLoss(w);
         if (beigeData.wars.data.length < 500) break;
