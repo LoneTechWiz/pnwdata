@@ -1,0 +1,15 @@
+[Unit]
+Description=PnW Alliance Discord Bot
+After=network.target pnwdata.service
+Requires=pnwdata.service
+
+[Service]
+Type=simple
+User=devin
+WorkingDirectory=/home/devin/dev/pnwdata
+ExecStart=/usr/bin/node bot.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

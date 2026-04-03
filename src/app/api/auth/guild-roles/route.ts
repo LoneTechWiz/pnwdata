@@ -1,10 +1,13 @@
 // src/app/api/auth/guild-roles/route.ts
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { readRoleConfig, hasAccess } from "@/lib/role-config";
 
 export async function GET() {
   const session = await getSession();
-  if (!session?.isEmperor) {
+  const config = readRoleConfig();
+  const canManageRoles = session?.isEmperor || (session != null && hasAccess(config, "/role-config", session.roleIds));
+  if (!canManageRoles) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -18,8 +21,9 @@ export async function GET() {
   }
 
   const roles = await res.json() as { id: string; name: string; color: number; position: number }[];
+  const adminRole = process.env.DISCORD_ADMIN_ROLE ?? "Emperor";
   const filtered = roles
-    .filter((r) => r.name !== "@everyone")
+    .filter((r) => r.name !== "@everyone" && r.name !== adminRole)
     .sort((a, b) => b.position - a.position);
 
   return NextResponse.json(filtered);

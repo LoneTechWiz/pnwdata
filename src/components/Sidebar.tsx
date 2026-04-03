@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield,
   Building2, Search, Clock, Calculator, Target, UserPlus,
-  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Brain,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Brain, Link2,
 } from "lucide-react";
 
 const nav = [
@@ -20,6 +20,7 @@ const hiddenNav = [
   // Members
   { label: "Members", href: "/members", icon: Users },
   { label: "Applicants", href: "/applicants", icon: UserPlus },
+  { label: "Relink", href: "/relink", icon: Link2 },
   { label: "Inactive", href: "/inactive", icon: Clock },
   { label: "Explore", href: "/explore", icon: Search },
   // Military & War

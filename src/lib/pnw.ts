@@ -23,10 +23,17 @@ export interface Nation {
   offensive_wars_count: number;
   defensive_wars_count: number;
   money?: number;
+  coal?: number;
+  oil?: number;
+  uranium?: number;
+  iron?: number;
+  bauxite?: number;
+  lead?: number;
   gasoline?: number;
   munitions?: number;
   steel?: number;
   aluminum?: number;
+  food?: number;
   continent?: string;
   mass_irrigation?: boolean;
   international_trade_center?: boolean;
@@ -56,8 +63,8 @@ export interface War {
   att_alliance_id: number;
   def_id: number;
   def_alliance_id: number;
-  attacker: { nation_name: string; leader_name: string; alliance?: { name: string } };
-  defender: { nation_name: string; leader_name: string; alliance?: { name: string } };
+  attacker: { nation_name: string; leader_name: string; alliance?: { name: string }; soldiers: number; tanks: number; aircraft: number; ships: number; spies: number };
+  defender: { nation_name: string; leader_name: string; alliance?: { name: string }; soldiers: number; tanks: number; aircraft: number; ships: number; spies: number };
   att_points: number;
   def_points: number;
   att_peace: boolean;
@@ -135,7 +142,9 @@ export interface SyncStatus {
 
 async function apiFetch<T>(type: string): Promise<T> {
   const res = await fetch(`/api/data?type=${type}`);
-  if (!res.ok) throw new Error(`Failed to fetch ${type}`);
+  if (!res.ok) throw new Error(`Failed to fetch ${type} (${res.status})`);
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) throw new Error(`Unexpected response for ${type}`);
   return res.json();
 }
 

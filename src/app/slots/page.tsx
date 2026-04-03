@@ -52,14 +52,14 @@ export default function SlotsPage() {
   });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
 
-  const memberIdSet = useMemo(() => new Set(members.map(m => m.id)), [members]);
+  const memberIdSet = useMemo(() => new Set(members.map(m => String(m.id))), [members]);
 
   // Count wars per BK member where their MAPs >= 11 (need to use attacks)
   const fullMapsCount = useMemo(() => {
-    const counts = new Map<number, number>();
+    const counts = new Map<string, number>();
     for (const war of wars) {
-      const attId = Number(war.att_id);
-      const defId = Number(war.def_id);
+      const attId = String(war.att_id);
+      const defId = String(war.def_id);
       if (memberIdSet.has(attId) && war.att_points >= 11) {
         counts.set(attId, (counts.get(attId) ?? 0) + 1);
       }
@@ -85,8 +85,8 @@ export default function SlotsPage() {
       let av: string | number;
       let bv: string | number;
       if (sortKey === "full_maps_wars") {
-        av = fullMapsCount.get(a.id) ?? 0;
-        bv = fullMapsCount.get(b.id) ?? 0;
+        av = fullMapsCount.get(String(a.id)) ?? 0;
+        bv = fullMapsCount.get(String(b.id)) ?? 0;
       } else {
         av = a[sortKey];
         bv = b[sortKey];
@@ -163,7 +163,7 @@ export default function SlotsPage() {
               Cities: m.num_cities,
               "Off Wars": m.offensive_wars_count,
               "Def Wars": m.defensive_wars_count,
-              "Full MAPs Wars": fullMapsCount.get(m.id) ?? 0,
+              "Full MAPs Wars": fullMapsCount.get(String(m.id)) ?? 0,
               "Beige Turns": m.beige_turns || "",
               "Last Active": timeSince(m.last_active),
             }))}
@@ -193,7 +193,7 @@ export default function SlotsPage() {
             </thead>
             <tbody className="divide-y divide-[#2a3150]">
               {sorted.map(m => {
-                const fullMaps = fullMapsCount.get(m.id) ?? 0;
+                const fullMaps = fullMapsCount.get(String(m.id)) ?? 0;
                 return (
                   <tr key={m.id} className="bg-[#161b2e] hover:bg-[#1e2540] transition-colors">
                     <td className="px-3 py-2 whitespace-nowrap">

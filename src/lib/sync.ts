@@ -26,7 +26,7 @@ const ALLIANCE_QUERY = `
 const MEMBERS_QUERY = `
   query($alliance_id:[Int]) { nations(alliance_id:$alliance_id, first:500) { data {
     id nation_name leader_name discord score num_cities color last_active continent
-    money gasoline munitions steel aluminum
+    money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food
     soldiers tanks aircraft ships missiles nukes
     vacation_mode_turns beige_turns alliance_position
     war_policy domestic_policy offensive_wars_count defensive_wars_count
@@ -36,12 +36,12 @@ const MEMBERS_QUERY = `
 `;
 
 const WARS_QUERY = `
-  query($alliance_id:[Int]) { wars(alliance_id:$alliance_id, active:true) { data {
+  query($alliance_id:[Int]) { wars(alliance_id:$alliance_id, active:true, first:1000) { data {
     id date reason war_type turns_left
     att_id att_alliance_id
     def_id def_alliance_id
-    attacker { nation_name leader_name alliance { name } }
-    defender { nation_name leader_name alliance { name } }
+    attacker { nation_name leader_name alliance { name } soldiers tanks aircraft ships spies }
+    defender { nation_name leader_name alliance { name } soldiers tanks aircraft ships spies }
     att_points def_points att_peace def_peace
     att_resistance def_resistance
     ground_control air_superiority naval_blockade

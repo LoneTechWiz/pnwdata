@@ -8,7 +8,7 @@ import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { Search, ArrowUpDown } from "lucide-react";
 import { ExportButton } from "@/components/ExportButton";
 
-type SortKey = keyof Nation;
+type SortKey = keyof Nation | "spies";
 type SortDir = "asc" | "desc";
 
 const POSITIONS: Record<string, string> = {
@@ -26,7 +26,10 @@ export default function MembersPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [showVm, setShowVm] = useState(true);
+  const [showVm, setShowVm] = useState(false);
+  const [showBeigeOnly, setShowBeigeOnly] = useState(false);
+  const [minSpies, setMinSpies] = useState("");
+  const [maxSpies, setMaxSpies] = useState("");
 
   const { data: members = [], isLoading, error } = useQuery({
     queryKey: ["members"],
@@ -47,6 +50,10 @@ export default function MembersPage() {
       .map(m => [String(m.nation.id), m.discord!.account!.discord_username])
   );
 
+  const bknetSpies = new Map(
+    bknetMembers.map(m => [String(m.nation.id), m.nation.military.spies])
+  );
+
   function handleSort(key: SortKey) {
     if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
@@ -54,6 +61,13 @@ export default function MembersPage() {
 
   const filtered = members
     .filter(m => showVm || m.vacation_mode_turns === 0)
+    .filter(m => !showBeigeOnly || m.beige_turns > 0)
+    .filter(m => {
+      const s = bknetSpies.get(String(m.id)) ?? null;
+      if (minSpies !== "" && (s === null || s < Number(minSpies))) return false;
+      if (maxSpies !== "" && (s === null || s > Number(maxSpies))) return false;
+      return true;
+    })
     .filter(m => {
       const q = search.toLowerCase();
       return (
@@ -63,8 +77,8 @@ export default function MembersPage() {
       );
     })
     .sort((a, b) => {
-      const av = a[sortKey] as number | string;
-      const bv = b[sortKey] as number | string;
+      const av = sortKey === "spies" ? (bknetSpies.get(String(a.id)) ?? -1) : a[sortKey] as number | string;
+      const bv = sortKey === "spies" ? (bknetSpies.get(String(b.id)) ?? -1) : b[sortKey] as number | string;
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -110,6 +124,7 @@ export default function MembersPage() {
                 Ships: m.ships,
                 Missiles: m.missiles,
                 Nukes: m.nukes,
+                Spies: bknetSpies.get(String(m.id)) ?? "",
                 "Off Wars": m.offensive_wars_count,
                 "Def Wars": m.defensive_wars_count,
                 "Last Active": m.last_active,
@@ -120,6 +135,32 @@ export default function MembersPage() {
               <input type="checkbox" checked={showVm} onChange={e => setShowVm(e.target.checked)} className="accent-blue-500" />
               Show Vacation Mode
             </label>
+            <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={showBeigeOnly} onChange={e => setShowBeigeOnly(e.target.checked)} className="accent-amber-500" />
+              Beige Only
+            </label>
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              Spies
+              <input
+                type="number"
+                min={0}
+                max={60}
+                placeholder="min"
+                value={minSpies}
+                onChange={e => setMinSpies(e.target.value)}
+                className="w-16 bg-[#0f1117] border border-[#2a3150] rounded px-2 py-0.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500"
+              />
+              <span className="text-slate-600">–</span>
+              <input
+                type="number"
+                min={0}
+                max={60}
+                placeholder="max"
+                value={maxSpies}
+                onChange={e => setMaxSpies(e.target.value)}
+                className="w-16 bg-[#0f1117] border border-[#2a3150] rounded px-2 py-0.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500"
+              />
+            </div>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input type="text" placeholder="Search nation, leader, or Discord…" value={search} onChange={e => setSearch(e.target.value)}
@@ -143,8 +184,10 @@ export default function MembersPage() {
                 <Th label="Ships" field="ships" />
                 <Th label="Missiles" field="missiles" />
                 <Th label="Nukes" field="nukes" />
+                <Th label="Spies" field="spies" />
                 <Th label="Off Wars" field="offensive_wars_count" />
                 <Th label="Def Wars" field="defensive_wars_count" />
+                <Th label="Beige Turns" field="beige_turns" />
                 <th className="px-3 py-3 text-right text-xs font-medium text-slate-400">Last Active</th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-slate-400">Status</th>
               </tr>
@@ -171,8 +214,16 @@ export default function MembersPage() {
                     <td className="px-3 py-2.5 text-right text-cyan-400">{m.ships?.toLocaleString()}</td>
                     <td className="px-3 py-2.5 text-right text-red-400">{m.missiles}</td>
                     <td className="px-3 py-2.5 text-right text-purple-400">{m.nukes}</td>
+                    <td className="px-3 py-2.5 text-right text-yellow-400">
+                      {bknetSpies.has(String(m.id)) ? bknetSpies.get(String(m.id)) : <span className="text-slate-600">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.offensive_wars_count}</td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.defensive_wars_count}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      {m.beige_turns > 0
+                        ? <span className="text-amber-400 font-semibold">{m.beige_turns}</span>
+                        : <span className="text-slate-600">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 text-right text-slate-400 text-xs">{timeSince(m.last_active)}</td>
                     <td className="px-3 py-2.5 text-right">
                       {isVm

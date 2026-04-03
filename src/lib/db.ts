@@ -57,7 +57,32 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS applicants (
+    id INTEGER PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS game_info (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   INSERT OR IGNORE INTO sync_status (id, status) VALUES (1, 'never');
+
+  CREATE TABLE IF NOT EXISTS quiz_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id TEXT UNIQUE NOT NULL,
+    squire_discord_id TEXT NOT NULL,
+    squire_username TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    current_question INTEGER NOT NULL DEFAULT 0,
+    correct INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER
+  );
 `);
 
 export default db;

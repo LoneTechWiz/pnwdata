@@ -6,7 +6,7 @@ import { StatCard } from "@/components/StatCard";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { Users, Shield, Plane, Anchor, Bomb, Zap } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from "recharts";
 
 const POLICY_COLORS: Record<string, string> = {
   ATTRITION: "#ef4444", TURTLE: "#22c55e", BLITZKRIEG: "#f97316",
@@ -56,6 +56,36 @@ export default function MilitaryPage() {
   const totalMissiles = members.reduce((s, m) => s + (m.missiles ?? 0), 0);
   const totalNukes = members.reduce((s, m) => s + (m.nukes ?? 0), 0);
 
+  const maxSoldiers = members.reduce((s, m) => s + m.num_cities * 15000, 0);
+  const maxTanks = members.reduce((s, m) => s + m.num_cities * 1250, 0);
+  const maxAircraft = members.reduce((s, m) => s + m.num_cities * 75, 0);
+  const maxShips = members.reduce((s, m) => s + m.num_cities * 15, 0);
+
+  const pct = (val: number, max: number) => max > 0 ? `${Math.round(val / max * 100)}% of max` : "";
+
+  // City tier chart — 5-city buckets
+  const tierMap = new Map<number, { soldiers: number; maxSoldiers: number; tanks: number; maxTanks: number; aircraft: number; maxAircraft: number; ships: number; maxShips: number }>();
+  for (const m of members) {
+    const tier = Math.floor((m.num_cities - 1) / 5) * 5 + 1;
+    const row = tierMap.get(tier) ?? { soldiers: 0, maxSoldiers: 0, tanks: 0, maxTanks: 0, aircraft: 0, maxAircraft: 0, ships: 0, maxShips: 0 };
+    row.soldiers += m.soldiers ?? 0;
+    row.maxSoldiers += m.num_cities * 15000;
+    row.tanks += m.tanks ?? 0;
+    row.maxTanks += m.num_cities * 1250;
+    row.aircraft += m.aircraft ?? 0;
+    row.maxAircraft += m.num_cities * 75;
+    row.ships += m.ships ?? 0;
+    row.maxShips += m.num_cities * 15;
+    tierMap.set(tier, row);
+  }
+  const tierData = [...tierMap.entries()].sort((a, b) => a[0] - b[0]).map(([tier, row]) => ({
+    tier: `C${tier}–${tier + 4}`,
+    Soldiers: row.maxSoldiers > 0 ? Math.round(row.soldiers / row.maxSoldiers * 100) : 0,
+    Tanks: row.maxTanks > 0 ? Math.round(row.tanks / row.maxTanks * 100) : 0,
+    Aircraft: row.maxAircraft > 0 ? Math.round(row.aircraft / row.maxAircraft * 100) : 0,
+    Ships: row.maxShips > 0 ? Math.round(row.ships / row.maxShips * 100) : 0,
+  }));
+
   const policyDist = members.reduce<Record<string, number>>((acc, m) => {
     acc[m.war_policy] = (acc[m.war_policy] ?? 0) + 1; return acc;
   }, {});
@@ -70,12 +100,33 @@ export default function MilitaryPage() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <StatCard label="Soldiers" value={totalSoldiers.toLocaleString()} icon={Users} color="text-green-400" sub={`avg ${Math.round(totalSoldiers / Math.max(members.length, 1)).toLocaleString()}`} />
-          <StatCard label="Tanks" value={totalTanks.toLocaleString()} icon={Shield} color="text-orange-400" sub={`avg ${Math.round(totalTanks / Math.max(members.length, 1)).toLocaleString()}`} />
-          <StatCard label="Aircraft" value={totalAircraft.toLocaleString()} icon={Plane} color="text-blue-400" sub={`avg ${Math.round(totalAircraft / Math.max(members.length, 1)).toLocaleString()}`} />
-          <StatCard label="Ships" value={totalShips.toLocaleString()} icon={Anchor} color="text-cyan-400" sub={`avg ${Math.round(totalShips / Math.max(members.length, 1)).toLocaleString()}`} />
+          <StatCard label="Soldiers" value={totalSoldiers.toLocaleString()} icon={Users} color="text-green-400" sub={pct(totalSoldiers, maxSoldiers)} />
+          <StatCard label="Tanks" value={totalTanks.toLocaleString()} icon={Shield} color="text-orange-400" sub={pct(totalTanks, maxTanks)} />
+          <StatCard label="Aircraft" value={totalAircraft.toLocaleString()} icon={Plane} color="text-blue-400" sub={pct(totalAircraft, maxAircraft)} />
+          <StatCard label="Ships" value={totalShips.toLocaleString()} icon={Anchor} color="text-cyan-400" sub={pct(totalShips, maxShips)} />
           <StatCard label="Missiles" value={totalMissiles} icon={Zap} color="text-red-400" />
           <StatCard label="Nukes" value={totalNukes} icon={Bomb} color="text-purple-400" />
+        </div>
+
+        <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-slate-300 mb-1">Militarization by City Tier</h3>
+          <p className="text-xs text-slate-500 mb-4">% of maximum possible — grouped in 5-city increments</p>
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={tierData} margin={{ left: 0, right: 16, top: 4, bottom: 0 }}>
+              <XAxis dataKey="tier" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fill: "#64748b", fontSize: 11 }} width={38} />
+              <Tooltip
+                contentStyle={{ background: "#1e2130", border: "1px solid #2a3150", borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: "#e2e8f0" }}
+                formatter={(v, name) => [`${v}%`, name]}
+              />
+              <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+              <Line type="monotone" dataKey="Soldiers" stroke="#22c55e" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="Tanks" stroke="#f97316" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="Aircraft" stroke="#3b82f6" dot={false} strokeWidth={2} />
+              <Line type="monotone" dataKey="Ships" stroke="#06b6d4" dot={false} strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
         <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">

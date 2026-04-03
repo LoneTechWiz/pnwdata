@@ -9,6 +9,7 @@ npm run dev      # Start dev server (http://localhost:3000) with Turbopack
 npm run build    # Production build
 npm run start    # Start production server
 npm run lint     # Run ESLint
+./start.sh       # Install deps if missing, then run dev (convenience wrapper)
 ```
 
 No test suite exists in this project.
@@ -42,6 +43,7 @@ PnW GraphQL API + BK Net REST API
 | `src/app/api/warTargets/route.ts` | Calls PnW GraphQL directly; no SQLite cache |
 | `src/app/api/conflictStats/route.ts` | Calls PnW GraphQL directly; no SQLite cache |
 | `src/app/api/beigeWatch/route.ts` | Calls PnW GraphQL directly; no SQLite cache |
+| `src/app/api/war-config/route.ts` | GET/POST `data/war-config.json`; requires `canManage` (Emperor or `/war-config` role) |
 | `src/lib/session.ts` | JWT session helpers (HS256 via `jose`); reads `SESSION_SECRET` |
 | `src/lib/role-config.ts` | Reads/writes `data/role-config.json`; `hasAccess()` checks Discord role IDs |
 
@@ -84,7 +86,7 @@ Discord OAuth flow: `/api/auth/discord` → Discord → `/api/auth/callback` →
 The sidebar has three tiers:
 - **Public nav** (`nav` array in `Sidebar.tsx`): War Targets, Conflict Stats, City Build — visible to all
 - **Member nav** (`hiddenNav` array): all other pages — visible only when Discord-authenticated (`isLoggedIn`)
-- **Admin nav**: Role Config — visible only when `me.canManageRoles` (Emperor or has the role-config Discord role)
+- **Admin nav**: Role Config, War Config — visible only when `me.canManageRoles` (Emperor or has the respective Discord role)
 
 **Adding a new member page requires changes in three places:**
 1. `src/components/Sidebar.tsx` — add entry to `hiddenNav`
@@ -110,11 +112,13 @@ The sidebar has three tiers:
 | `/cashholders` | Stockpile — nations exceeding per-city thresholds for cash, gasoline, munitions, steel, or aluminum (VM nations excluded) |
 | `/charts` | Charts |
 | `/inactive` | Inactive members |
+| `/relink` | Members with no Discord linked in BK Net (needs BK Net sync to be meaningful) |
 | `/optimizer` | City Build Optimizer |
 | `/explore` | Explore nations |
 | `/command-center` | Per-nation war viewer — select a member to see their active wars with resistance/points/unit counts |
 | `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
 | `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
+| `/war-config` | Admin UI to manage enemy/ally alliance IDs in `war-config.json` (canManageRoles only) |
 
 ### External APIs
 
@@ -137,6 +141,7 @@ DISCORD_CLIENT_SECRET= # Discord OAuth app client secret
 DISCORD_REDIRECT_URI=  # Full callback URL, e.g. https://example.com/api/auth/callback
 DISCORD_GUILD_ID=      # Discord server ID for member/role lookup
 DISCORD_ADMIN_ROLE=    # Username that grants isEmperor (default: "Emperor")
+DISCORD_BOT_TOKEN=     # Discord bot token for bot.js
 ```
 
 ### Key Config
@@ -147,6 +152,24 @@ DISCORD_ADMIN_ROLE=    # Username that grants isEmperor (default: "Emperor")
 - `data/war-config.json` — runtime config for war features; **not** excluded from git. Edit this file to update enemy/ally alliance lists:
   - `enemy_alliance_ids: number[]` — enemy alliance IDs; fetched live by `/api/warTargets` and `/api/conflictStats`
   - `ally_alliance_ids: number[]` — ally alliance IDs; used by `/api/conflictStats` to label each coalition side
+
+### Discord Bot
+
+`bot.js` is a standalone Discord.js v14 bot — separate from the Next.js app, not imported by it.
+
+```bash
+node bot.js          # Start the bot
+nohup node bot.js > /tmp/bot.log 2>&1 &   # Start in background
+```
+
+To restart: `kill -9 $(ps aux | grep "node bot.js" | grep -v grep | awk '{print $2}')` then start again (`pkill` exits 144 and the process survives).
+
+- Reads `.env.local` manually (no dotenv dependency) — shares the same env file as the Next.js app
+- Queries `data/pnw.db` directly via `better-sqlite3` (read-only)
+- Registers `/targets` as a **guild slash command** on startup (instant, uses `DISCORD_GUILD_ID`) — requires the `interactionCreate` handler
+- `/targets` looks up the caller's Discord username in SQLite, calls `http://localhost:3000/api/warTargets`, and returns the top 5 targets (highest avg infra / lowest soldiers) as embeds with declare-war link buttons
+- Message triggers (via `messageCreate` + `MessageContent` privileged intent): `ayy`, `hail`, `grok` mentions, `summarize/summarise this`, `ayylah give me wisdom`, `ayylah grant me a wish`
+- **MessageContent is a privileged intent** — must be enabled in Discord Developer Portal → Bot → Privileged Gateway Intents
 
 ### Deployment Notes
 

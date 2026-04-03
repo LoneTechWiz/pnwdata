@@ -16,21 +16,39 @@ interface ResourceConfig {
 }
 
 const RESOURCES: ResourceConfig[] = [
-  { key: "money",     label: "Cash",       color: "text-yellow-400", unit: "$" },
-  { key: "gasoline",  label: "Gasoline",   color: "text-orange-400", unit: ""  },
-  { key: "munitions", label: "Munitions",  color: "text-red-400",    unit: ""  },
-  { key: "steel",     label: "Steel",      color: "text-slate-300",  unit: ""  },
-  { key: "aluminum",  label: "Aluminum",   color: "text-cyan-400",   unit: ""  },
+  { key: "money",     label: "Cash",       color: "text-yellow-400",  unit: "$" },
+  { key: "coal",      label: "Coal",       color: "text-stone-400",   unit: ""  },
+  { key: "oil",       label: "Oil",        color: "text-amber-600",   unit: ""  },
+  { key: "uranium",   label: "Uranium",    color: "text-lime-400",    unit: ""  },
+  { key: "iron",      label: "Iron",       color: "text-zinc-400",    unit: ""  },
+  { key: "bauxite",   label: "Bauxite",    color: "text-orange-300",  unit: ""  },
+  { key: "lead",      label: "Lead",       color: "text-slate-400",   unit: ""  },
+  { key: "gasoline",  label: "Gasoline",   color: "text-orange-400",  unit: ""  },
+  { key: "munitions", label: "Munitions",  color: "text-red-400",     unit: ""  },
+  { key: "steel",     label: "Steel",      color: "text-slate-300",   unit: ""  },
+  { key: "aluminum",  label: "Aluminum",   color: "text-cyan-400",    unit: ""  },
+  { key: "food",      label: "Food",       color: "text-green-400",   unit: ""  },
 ];
 
-type SortKey = "nation_name" | "num_cities" | "money" | "gasoline" | "munitions" | "steel" | "aluminum";
+type SortKey = "nation_name" | "num_cities" | "safe" | "money" | "coal" | "oil" | "uranium" | "iron" | "bauxite" | "lead" | "gasoline" | "munitions" | "steel" | "aluminum" | "food";
+
+function isSafe(m: Nation): boolean {
+  return m.beige_turns > 0 && m.offensive_wars_count === 0 && m.defensive_wars_count === 0;
+}
 
 const DEFAULT_THRESHOLDS: Record<string, string> = {
   money: "2000000",
+  coal: "",
+  oil: "",
+  uranium: "",
+  iron: "",
+  bauxite: "",
+  lead: "",
   gasoline: "",
   munitions: "",
   steel: "",
   aluminum: "",
+  food: "",
 };
 
 function fmt(value: number, unit: string) {
@@ -80,8 +98,11 @@ export default function CashHoldersPage() {
         return (m[r.key] as number ?? 0) > threshold;
       }))
       .sort((a, b) => {
-        const av = sortKey === "nation_name" ? a.nation_name : (a[sortKey] ?? 0) as number | string;
-        const bv = sortKey === "nation_name" ? b.nation_name : (b[sortKey] ?? 0) as number | string;
+        let av: number | string;
+        let bv: number | string;
+        if (sortKey === "nation_name") { av = a.nation_name; bv = b.nation_name; }
+        else if (sortKey === "safe") { av = isSafe(a) ? 1 : 0; bv = isSafe(b) ? 1 : 0; }
+        else { av = (a[sortKey] ?? 0) as number; bv = (b[sortKey] ?? 0) as number; }
         const cmp = av < bv ? -1 : av > bv ? 1 : 0;
         return sortDir === "asc" ? cmp : -cmp;
       });
@@ -129,11 +150,19 @@ export default function CashHoldersPage() {
               Leader: m.leader_name,
               Discord: bknetDiscord.get(String(m.id)) ?? "",
               Cities: m.num_cities,
+              Safe: isSafe(m) ? "Safe" : "Not Safe",
               Cash: m.money ?? 0,
+              Coal: m.coal ?? 0,
+              Oil: m.oil ?? 0,
+              Uranium: m.uranium ?? 0,
+              Iron: m.iron ?? 0,
+              Bauxite: m.bauxite ?? 0,
+              Lead: m.lead ?? 0,
               Gasoline: m.gasoline ?? 0,
               Munitions: m.munitions ?? 0,
               Steel: m.steel ?? 0,
               Aluminum: m.aluminum ?? 0,
+              Food: m.food ?? 0,
             }))}
           />
         </div>
@@ -147,10 +176,10 @@ export default function CashHoldersPage() {
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b border-[#2a3150]">
-                  {(["nation_name", "num_cities", ...RESOURCES.map(r => r.key)] as SortKey[]).map((key, i) => {
+                  {(["nation_name", "num_cities", "safe", ...RESOURCES.map(r => r.key)] as SortKey[]).map((key, i) => {
                     const res = RESOURCES.find(r => r.key === key);
-                    const label = key === "nation_name" ? "Nation" : key === "num_cities" ? "Cities" : res!.label;
-                    const color = res ? res.color : "text-slate-400";
+                    const label = key === "nation_name" ? "Nation" : key === "num_cities" ? "Cities" : key === "safe" ? "Safe?" : res!.label;
+                    const color = key === "safe" ? "text-green-400" : res ? res.color : "text-slate-400";
                     const active = sortKey === key;
                     const isLeft = key === "nation_name";
                     return (
@@ -187,6 +216,11 @@ export default function CashHoldersPage() {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.num_cities}</td>
+                    <td className="px-3 py-2.5 text-right font-medium">
+                      {isSafe(m)
+                        ? <span className="text-green-400">Safe</span>
+                        : <span className="text-red-400">Not Safe</span>}
+                    </td>
                     {RESOURCES.map(r => {
                       const val = m[r.key] as number ?? 0;
                       const threshold = parseFloat(thresholds[r.key as string]);

@@ -4,7 +4,7 @@ import { verifySessionToken } from "@/lib/session";
 import { readRoleConfig, hasAccess } from "@/lib/role-config";
 
 
-const PUBLIC_PREFIXES = ["/_next/", "/favicon.ico", "/api/auth/"];
+const PUBLIC_PREFIXES = ["/_next/", "/favicon.ico", "/api/"];
 
 const PUBLIC_EXACT = new Set([
   "/",
@@ -35,12 +35,7 @@ export async function proxy(req: NextRequest) {
   // Emperor bypasses all role checks
   if (session.isEmperor) return NextResponse.next();
 
-  // /role-config is Emperor-only
-  if (pathname === "/role-config") {
-    return NextResponse.rewrite(new URL("/403", req.url));
-  }
-
-  // Check role-config.json for all other protected routes
+  // Check role-config.json for all protected routes
   const config = readRoleConfig();
   if (hasAccess(config, pathname, session.roleIds)) {
     return NextResponse.next();

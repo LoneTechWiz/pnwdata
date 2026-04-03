@@ -21,7 +21,7 @@ export function SyncStatus() {
   });
 
   const { mutate: triggerSync, isPending } = useMutation({
-    mutationFn: () => fetch("/api/sync", { method: "POST" }).then(r => r.json()),
+    mutationFn: () => fetch("/api/sync", { method: "POST" }).then(r => { if (!r.ok) throw new Error(`Sync failed (${r.status})`); return r.json(); }),
     onSuccess: () => {
       // Poll for completion then refresh all data
       const poll = setInterval(async () => {

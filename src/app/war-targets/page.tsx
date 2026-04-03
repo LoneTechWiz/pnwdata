@@ -35,6 +35,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "defensive_wars_count", label: "Def Wars" },
   { key: "beige_loot", label: "Beige Loot" },
   { key: "beige_avg", label: "Avg Beige" },
+  { key: "last_active", label: "Last Active" },
 ];
 
 export default function WarTargetsPage() {
@@ -332,6 +333,9 @@ export default function WarTargetsPage() {
                           <div className="text-slate-500 text-xs">{t.beige_count} war{t.beige_count === 1 ? "" : "s"}</div>
                         </div>
                       ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-300 text-xs">
+                      {new Date(t.last_active).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}

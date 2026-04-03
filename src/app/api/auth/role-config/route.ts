@@ -1,11 +1,17 @@
 // src/app/api/auth/role-config/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { readRoleConfig, writeRoleConfig, RoleConfig } from "@/lib/role-config";
+import { readRoleConfig, writeRoleConfig, hasAccess, RoleConfig } from "@/lib/role-config";
+
+function canManage(session: Awaited<ReturnType<typeof getSession>>): boolean {
+  if (!session) return false;
+  const config = readRoleConfig();
+  return session.isEmperor || hasAccess(config, "/role-config", session.roleIds);
+}
 
 export async function GET() {
   const session = await getSession();
-  if (!session?.isEmperor) {
+  if (!canManage(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   return NextResponse.json(readRoleConfig());
@@ -13,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session?.isEmperor) {
+  if (!canManage(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const body = await req.json() as RoleConfig;

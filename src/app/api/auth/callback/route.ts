@@ -6,13 +6,14 @@ const GUILD_ID = process.env.DISCORD_GUILD_ID!;
 const ADMIN_ROLE = process.env.DISCORD_ADMIN_ROLE ?? "Emperor";
 
 export async function GET(req: NextRequest) {
+  const baseUrl = new URL(process.env.DISCORD_REDIRECT_URI!).origin;
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const storedState = req.cookies.get("__oauth_state")?.value;
 
   if (!code || !state || state !== storedState) {
-    return NextResponse.redirect(new URL("/login?error=invalid_state", req.url));
+    return NextResponse.redirect(new URL("/login?error=invalid_state", baseUrl));
   }
 
   // Exchange code for access token
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL("/login?error=token_exchange", req.url));
+    return NextResponse.redirect(new URL("/login?error=token_exchange", baseUrl));
   }
 
   const { access_token } = await tokenRes.json() as { access_token: string };
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
   );
 
   if (!memberRes.ok) {
-    return NextResponse.redirect(new URL("/login?error=not_member", req.url));
+    return NextResponse.redirect(new URL("/login?error=not_member", baseUrl));
   }
 
   const member = await memberRes.json() as {
@@ -58,7 +59,11 @@ export async function GET(req: NextRequest) {
   let isEmperor = false;
   if (rolesRes.ok) {
     const guildRoles = await rolesRes.json() as { id: string; name: string }[];
-    const emperorRole = guildRoles.find((r) => r.name === ADMIN_ROLE);
+    // ADMIN_ROLE can be a role name or a numeric role ID snowflake
+    const isSnowflake = /^\d+$/.test(ADMIN_ROLE);
+    const emperorRole = isSnowflake
+      ? guildRoles.find((r) => r.id === ADMIN_ROLE)
+      : guildRoles.find((r) => r.name === ADMIN_ROLE);
     if (emperorRole) {
       isEmperor = member.roles.includes(emperorRole.id);
     }
@@ -72,7 +77,7 @@ export async function GET(req: NextRequest) {
     isEmperor,
   });
 
-  const res = NextResponse.redirect(new URL("/", req.url));
+  const res = NextResponse.redirect(new URL("/", baseUrl));
   // Use res.cookies.set() for reliable multi-cookie writes
   res.cookies.set(SESSION_COOKIE, token, COOKIE_OPTIONS);
   res.cookies.set("__oauth_state", "", { httpOnly: true, sameSite: "lax", maxAge: 0, path: "/" });

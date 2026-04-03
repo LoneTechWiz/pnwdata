@@ -55,6 +55,7 @@ const ENEMY_MEMBERS_QUERY = `
     cities { infrastructure }
     soldiers tanks aircraft ships
     offensive_wars_count defensive_wars_count vacation_mode_turns beige_turns
+    last_active
   } } }
 `;
 
@@ -74,6 +75,7 @@ interface EnemyNation {
   defensive_wars_count: number;
   vacation_mode_turns: number;
   beige_turns: number;
+  last_active: string;
 }
 
 export interface WarTarget {
@@ -96,6 +98,7 @@ export interface WarTarget {
   beige_date: string | null;
   beige_avg: number | null;
   beige_count: number | null;
+  last_active: string;
 }
 
 export interface WarTargetsResponse {
@@ -284,6 +287,7 @@ export async function GET(request: NextRequest) {
         beige_date: beige?.date ?? null,
         beige_avg: beige ? Math.round(beige.allLoots.reduce((s, v) => s + v, 0) / beige.allLoots.length) : null,
         beige_count: beige?.allLoots.length ?? null,
+        last_active: n.last_active,
       };
     })
     .sort((a, b) => b.avg_infra - a.avg_infra);

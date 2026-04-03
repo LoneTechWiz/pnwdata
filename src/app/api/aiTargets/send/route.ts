@@ -52,12 +52,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No Discord username linked to this nation" }, { status: 404 });
   }
 
+  // Strip legacy discriminator (e.g. "user#0" → "user")
+  const discordBase = discordUsername.includes("#") ? discordUsername.split("#")[0] : discordUsername;
+
   type GuildMember = { user: { id: string; username: string } };
   const members = await discordFetch<GuildMember[]>(
-    `/guilds/${process.env.DISCORD_GUILD_ID}/members/search?query=${encodeURIComponent(discordUsername)}&limit=10`
+    `/guilds/${process.env.DISCORD_GUILD_ID}/members/search?query=${encodeURIComponent(discordBase)}&limit=10`
   );
 
-  const member = members.find(m => m.user.username.toLowerCase() === discordUsername.toLowerCase());
+  const member = members.find(m => m.user.username.toLowerCase() === discordBase.toLowerCase());
   if (!member) {
     return NextResponse.json(
       { error: `Discord user "${discordUsername}" not found in server` },
