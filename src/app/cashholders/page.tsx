@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus, Nation } from "@/lib/pnw";
+import { fetchMembers, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved, Nation } from "@/lib/pnw";
 import { ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
@@ -17,12 +17,7 @@ interface ResourceConfig {
 
 const RESOURCES: ResourceConfig[] = [
   { key: "money",     label: "Cash",       color: "text-yellow-400",  unit: "$" },
-  { key: "coal",      label: "Coal",       color: "text-stone-400",   unit: ""  },
-  { key: "oil",       label: "Oil",        color: "text-amber-600",   unit: ""  },
   { key: "uranium",   label: "Uranium",    color: "text-lime-400",    unit: ""  },
-  { key: "iron",      label: "Iron",       color: "text-zinc-400",    unit: ""  },
-  { key: "bauxite",   label: "Bauxite",    color: "text-orange-300",  unit: ""  },
-  { key: "lead",      label: "Lead",       color: "text-slate-400",   unit: ""  },
   { key: "gasoline",  label: "Gasoline",   color: "text-orange-400",  unit: ""  },
   { key: "munitions", label: "Munitions",  color: "text-red-400",     unit: ""  },
   { key: "steel",     label: "Steel",      color: "text-slate-300",   unit: ""  },
@@ -30,7 +25,7 @@ const RESOURCES: ResourceConfig[] = [
   { key: "food",      label: "Food",       color: "text-green-400",   unit: ""  },
 ];
 
-type SortKey = "nation_name" | "num_cities" | "safe" | "money" | "coal" | "oil" | "uranium" | "iron" | "bauxite" | "lead" | "gasoline" | "munitions" | "steel" | "aluminum" | "food";
+type SortKey = "nation_name" | "num_cities" | "safe" | "money" | "uranium" | "gasoline" | "munitions" | "steel" | "aluminum" | "food";
 
 function isSafe(m: Nation): boolean {
   return m.beige_turns > 0 && m.offensive_wars_count === 0 && m.defensive_wars_count === 0;
@@ -38,12 +33,7 @@ function isSafe(m: Nation): boolean {
 
 const DEFAULT_THRESHOLDS: Record<string, string> = {
   money: "2000000",
-  coal: "",
-  oil: "",
   uranium: "",
-  iron: "",
-  bauxite: "",
-  lead: "",
   gasoline: "",
   munitions: "",
   steel: "",
@@ -77,12 +67,18 @@ export default function CashHoldersPage() {
     refetchInterval: 10 * 60 * 1000,
   });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
+  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
 
   const bknetDiscord = useMemo(() => new Map(
     bknetMembers
-      .filter(m => m.discord?.account?.discord_username)
-      .map(m => [String(m.nation.id), m.discord!.account!.discord_username])
-  ), [bknetMembers]);
+      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
+      .map(m => {
+        const id = m.discord?.account?.discord_id;
+        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
+        return [String(m.nation.id), name] as [string, string];
+      })
+      .filter(([, name]) => name)
+  ), [bknetMembers, discordResolved]);
 
   const filtered = useMemo(() => {
     const active = RESOURCES.filter(r => {
@@ -152,12 +148,7 @@ export default function CashHoldersPage() {
               Cities: m.num_cities,
               Safe: isSafe(m) ? "Safe" : "Not Safe",
               Cash: m.money ?? 0,
-              Coal: m.coal ?? 0,
-              Oil: m.oil ?? 0,
               Uranium: m.uranium ?? 0,
-              Iron: m.iron ?? 0,
-              Bauxite: m.bauxite ?? 0,
-              Lead: m.lead ?? 0,
               Gasoline: m.gasoline ?? 0,
               Munitions: m.munitions ?? 0,
               Steel: m.steel ?? 0,

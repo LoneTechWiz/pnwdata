@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus, Nation } from "@/lib/pnw";
+import { fetchMembers, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved, Nation } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -43,11 +43,17 @@ export default function MembersPage() {
     refetchInterval: 10 * 60 * 1000,
   });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
+  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
 
   const bknetDiscord = new Map(
     bknetMembers
-      .filter(m => m.discord?.account?.discord_username)
-      .map(m => [String(m.nation.id), m.discord!.account!.discord_username])
+      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
+      .map(m => {
+        const id = m.discord?.account?.discord_id;
+        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
+        return [String(m.nation.id), name] as [string, string];
+      })
+      .filter(([, name]) => name)
   );
 
   const bknetSpies = new Map(

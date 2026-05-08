@@ -11,17 +11,134 @@ for (const line of readFileSync(".env.local", "utf8").split("\n")) {
 }
 
 const db = new Database("data/pnw.db", { readonly: true });
+const dbRW = new Database("data/pnw.db"); // read-write for marking alerts sent
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
 });
 
+const RESOURCE_LABELS = {
+  money: "Cash",
+  coal: "Coal",
+  oil: "Oil",
+  uranium: "Uranium",
+  iron: "Iron",
+  bauxite: "Bauxite",
+  lead: "Lead",
+  gasoline: "Gasoline",
+  munitions: "Munitions",
+  steel: "Steel",
+  aluminum: "Aluminum",
+  food: "Food",
+};
+
+async function resolveGuildUsernames() {
+  const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
+  if (!guild) { console.warn("[Discord Resolved] Guild not in cache:", process.env.DISCORD_GUILD_ID); return; }
+  await guild.members.fetch();
+  const now = Date.now();
+  const stmt = dbRW.prepare(`INSERT OR REPLACE INTO discord_resolved (discord_id, username, updated_at) VALUES (?, ?, ?)`);
+  const upsertAll = dbRW.transaction((members) => {
+    for (const [id, member] of members) {
+      stmt.run(id, member.user.username, now);
+    }
+  });
+  upsertAll(guild.members.cache);
+  console.log(`[Discord Resolved] Cached ${guild.members.cache.size} usernames`);
+}
+
+async function sendStockpileAlerts() {
+  const unsent = db.prepare(`SELECT * FROM stockpile_alert_queue WHERE sent = 0`).all();
+  if (unsent.length === 0) return;
+
+  // Group by discord_id (preferred) or discord_username as fallback key
+  const byUser = new Map();
+  for (const alert of unsent) {
+    const key = alert.discord_id || alert.discord_username;
+    if (!key) {
+      dbRW.prepare(`UPDATE stockpile_alert_queue SET sent = 1, sent_at = ? WHERE id = ?`)
+        .run(Date.now(), alert.id);
+      continue;
+    }
+    if (!byUser.has(key)) byUser.set(key, []);
+    byUser.get(key).push(alert);
+  }
+
+  const guild = client.guilds.cache.get(process.env.DISCORD_GUILD_ID);
+
+  for (const [key, alerts] of byUser) {
+    try {
+      const discordId = alerts[0].discord_id;
+      const username = alerts[0].discord_username;
+      let user;
+
+      if (discordId) {
+        user = await client.users.fetch(discordId);
+      } else if (guild && username) {
+        // Fallback: guild member search by username
+        const searchQuery = username.includes("#") ? username.split("#")[0] : username;
+        const members = await guild.members.search({ query: searchQuery, limit: 10 });
+        const member = members.find(m =>
+          m.user.username.toLowerCase() === username.toLowerCase() ||
+          m.user.tag.toLowerCase() === username.toLowerCase()
+        );
+        user = member?.user;
+      }
+
+      if (!user) {
+        console.warn(`[Stockpile Alerts] Could not resolve user for nation ${alerts[0].nation_name} (id=${discordId}, username=${username})`);
+        for (const alert of alerts) {
+          dbRW.prepare(`UPDATE stockpile_alert_queue SET sent = 1, sent_at = ? WHERE id = ?`)
+            .run(Date.now(), alert.id);
+        }
+        continue;
+      }
+
+      const lines = alerts.map(a => {
+        const label = RESOURCE_LABELS[a.resource] ?? a.resource;
+        const limit = a.threshold * a.num_cities;
+        const excess = a.amount - limit;
+        if (a.resource === "money") {
+          return `• **${label}**: $${Math.round(a.amount).toLocaleString()} — limit $${Math.round(limit).toLocaleString()} ($${Math.round(excess).toLocaleString()} over)`;
+        }
+        return `• **${label}**: ${Math.round(a.amount).toLocaleString()} — limit ${Math.round(limit).toLocaleString()} (${Math.round(excess).toLocaleString()} over)`;
+      }).join("\n");
+
+      await user.send(
+        `⚠️ **Stockpile Alert** — ${alerts[0].nation_name}\n\n` +
+        `You're holding more than the per-city limits:\n${lines}\n\n` +
+        `Consider depositing the excess to the alliance bank.`
+      );
+
+      for (const alert of alerts) {
+        dbRW.prepare(`UPDATE stockpile_alert_queue SET sent = 1, sent_at = ? WHERE id = ?`)
+          .run(Date.now(), alert.id);
+      }
+      console.log(`[Stockpile Alerts] DMed ${user.username} about ${alerts.length} resource(s)`);
+    } catch (err) {
+      console.error(`[Stockpile Alerts] Failed to DM for nation ${alerts[0].nation_name}:`, err.message);
+    }
+  }
+}
+
 client.on("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
+
+  // Resolve and cache Discord usernames from guild members
+  resolveGuildUsernames().catch(err => console.error("[Discord Resolved] Initial error:", err));
+  setInterval(() => {
+    resolveGuildUsernames().catch(err => console.error("[Discord Resolved] Refresh error:", err));
+  }, 60 * 60 * 1000);
+
+  // Poll for unsent stockpile alerts every 2 minutes
+  setInterval(() => {
+    sendStockpileAlerts().catch(err => console.error("[Stockpile Alerts] Poll error:", err));
+  }, 2 * 60 * 1000);
 
   // Register /targets as a guild command (instant, no propagation delay)
   const commands = [

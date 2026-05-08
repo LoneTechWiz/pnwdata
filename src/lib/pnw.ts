@@ -233,3 +233,4 @@ export const fetchBknetMembers = (): Promise<BknetMember[]> => apiFetch("bknet_m
 export const fetchSyncStatus = (): Promise<SyncStatus> => apiFetch("status");
 export const fetchTradePrices = (): Promise<TradePrice | null> => apiFetch("trade_prices");
 export const fetchGameInfo = (): Promise<GameInfo | null> => apiFetch("game_info");
+export const fetchDiscordResolved = (): Promise<Record<string, string>> => apiFetch("discord_resolved");

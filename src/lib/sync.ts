@@ -1,4 +1,24 @@
 import type { Nation, War, BankRec, Alliance } from "./pnw";
+import { readFileSync, existsSync } from "fs";
+import path from "path";
+
+const STOCKPILE_ALERT_CONFIG_PATH = path.join(process.cwd(), "data", "stockpile-alert-config.json");
+
+interface StockpileAlertConfig {
+  enabled: boolean;
+  thresholds: Record<string, number | null>;
+}
+
+function readStockpileAlertConfig(): StockpileAlertConfig | null {
+  if (!existsSync(STOCKPILE_ALERT_CONFIG_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(STOCKPILE_ALERT_CONFIG_PATH, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+const ALERT_RESOURCES = ["money", "coal", "oil", "uranium", "iron", "bauxite", "lead", "gasoline", "munitions", "steel", "aluminum", "food"] as const;
 
 const PNW_API = "https://api.politicsandwar.com/graphql";
 const BKNET_API = "https://bkpw.net/api/v1";
@@ -166,6 +186,92 @@ export async function sync(): Promise<void> {
         db.prepare(`DELETE FROM bknet_members WHERE id NOT IN (${bknetMembers.map(m => m.nation.id).join(",")})`).run();
       }
       console.log(`[PnW Sync] BK Net — ${bknetMembers.length} members synced`);
+    }
+
+    // ── Stockpile alerts ──────────────────────────────────────────────────────
+    const alertConfig = readStockpileAlertConfig();
+    if (alertConfig?.enabled) {
+      // Clean up sent alerts older than 7 days
+      db.prepare(`DELETE FROM stockpile_alert_queue WHERE sent = 1 AND sent_at < ?`)
+        .run(now - 7 * 24 * 60 * 60 * 1000);
+
+      // Build discord username map. BK Net is primary but may lag behind Discord's
+      // new username system (still returning legacy "User#1234" format). If BK Net
+      // has a legacy discriminator and PnW has a current username, prefer PnW.
+      // Strip trailing #0 (new-format placeholder discriminator) from either source.
+      function normalizeDiscord(raw: string): string {
+        return raw.replace(/#0$/, "");
+      }
+      function isLegacyDiscord(raw: string): boolean {
+        const m = raw.match(/#(\d+)$/);
+        return m != null && m[1] !== "0" && m[1] !== "0000";
+      }
+
+      const bknetRows = db.prepare(`SELECT id, data FROM bknet_members`).all() as Array<{ id: number; data: string }>;
+      const bknetDiscordRaw = new Map<string, string>();
+      const bknetDiscordIdMap = new Map<string, string>();
+      for (const row of bknetRows) {
+        const m = JSON.parse(row.data) as { discord?: { account?: { discord_username?: string; discord_id?: string } } };
+        const raw = m.discord?.account?.discord_username;
+        const id = m.discord?.account?.discord_id;
+        if (raw) bknetDiscordRaw.set(String(row.id), raw);
+        if (id) bknetDiscordIdMap.set(String(row.id), id);
+      }
+
+      const discordMap = new Map<string, string>();
+      for (const nation of nations) {
+        const bknet = bknetDiscordRaw.get(String(nation.id));
+        const pnw = nation.discord?.trim() || null;
+        if (bknet && !isLegacyDiscord(bknet)) {
+          discordMap.set(String(nation.id), normalizeDiscord(bknet));
+        } else if (pnw) {
+          discordMap.set(String(nation.id), normalizeDiscord(pnw));
+        } else if (bknet) {
+          discordMap.set(String(nation.id), bknet);
+        }
+      }
+
+      // Build set of blockaded nation IDs from active wars
+      const warRows = db.prepare(`SELECT data FROM wars`).all() as Array<{ data: string }>;
+      const blockadedIds = new Set<number>();
+      for (const row of warRows) {
+        const w = JSON.parse(row.data) as { naval_blockade: number; att_id: number; def_id: number };
+        if (!w.naval_blockade) continue;
+        if (w.naval_blockade === w.att_id) blockadedIds.add(w.def_id);
+        else if (w.naval_blockade === w.def_id) blockadedIds.add(w.att_id);
+      }
+
+      const oneDayAgo = now - 24 * 60 * 60 * 1000;
+      const insertAlert = db.prepare(
+        `INSERT INTO stockpile_alert_queue (nation_id, nation_name, discord_username, discord_id, resource, amount, num_cities, threshold, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+
+      for (const nation of nations) {
+        if (nation.vacation_mode_turns > 0) continue;
+
+        // 24h cooldown per nation (not per resource)
+        const recentAny = db.prepare(
+          `SELECT id FROM stockpile_alert_queue WHERE nation_id = ? AND created_at > ? LIMIT 1`
+        ).get(nation.id, oneDayAgo);
+        if (recentAny) continue;
+
+        const discord = discordMap.get(String(nation.id)) ?? null;
+        const isBlockaded = blockadedIds.has(nation.id);
+
+        for (const resource of ALERT_RESOURCES) {
+          // Blockaded nations: only alert for cash
+          if (isBlockaded && resource !== "money") continue;
+
+          const threshold = alertConfig.thresholds[resource];
+          if (threshold == null || threshold <= 0) continue;
+          const amount = (nation[resource as keyof Nation] as number) ?? 0;
+          if (amount <= threshold * nation.num_cities) continue;
+
+          const discordId = bknetDiscordIdMap.get(String(nation.id)) ?? null;
+          insertAlert.run(nation.id, nation.nation_name, discord, discordId, resource, amount, nation.num_cities, threshold, now);
+        }
+      }
     }
 
     db.prepare(

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, Landmark, BarChart2, Shield,
   Building2, Search, Clock, Calculator, Target, UserPlus,
-  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Brain, Link2, Coins,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Brain, Link2, BellRing, Coins,
 } from "lucide-react";
 
 const nav = [
@@ -128,6 +128,15 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
             >
               <Swords size={16} />
               War Config
+            </Link>
+            <Link
+              href="/stockpile-alert-config"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                pathname === "/stockpile-alert-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+              }`}
+            >
+              <BellRing size={16} />
+              Stockpile Alerts
             </Link>
           </>
         )}

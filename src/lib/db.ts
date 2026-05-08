@@ -83,6 +83,27 @@ db.exec(`
     started_at INTEGER NOT NULL,
     completed_at INTEGER
   );
+
+  CREATE TABLE IF NOT EXISTS discord_resolved (
+    discord_id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS stockpile_alert_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nation_id INTEGER NOT NULL,
+    nation_name TEXT NOT NULL,
+    discord_username TEXT,
+    discord_id TEXT,
+    resource TEXT NOT NULL,
+    amount REAL NOT NULL,
+    num_cities INTEGER NOT NULL,
+    threshold REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    sent INTEGER NOT NULL DEFAULT 0,
+    sent_at INTEGER
+  );
 `);
 
 export default db;
