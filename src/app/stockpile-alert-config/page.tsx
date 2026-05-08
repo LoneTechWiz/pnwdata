@@ -128,17 +128,18 @@ export default function StockpileAlertConfigPage() {
         {/* Threshold inputs */}
         <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-5 space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-white">Per-city thresholds</h2>
+            <h2 className="text-sm font-semibold text-white">Thresholds</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Leave blank to disable alerts for that resource. Members holding more than threshold × cities will be notified.
+              Leave blank to disable alerts for that resource. Members holding more than threshold × cities will be notified — except uranium, which uses a flat (total) threshold.
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {RESOURCES.map(r => {
               const val = active.thresholds[r.key];
+              const isFlat = r.key === "uranium";
               return (
                 <div key={r.key}>
-                  <label className={`block text-xs font-medium mb-1 ${r.color}`}>{r.label} / city</label>
+                  <label className={`block text-xs font-medium mb-1 ${r.color}`}>{r.label} {isFlat ? "(total)" : "/ city"}</label>
                   <input
                     type="number"
                     min="0"

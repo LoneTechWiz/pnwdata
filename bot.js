@@ -101,7 +101,7 @@ async function sendStockpileAlerts() {
 
       const lines = alerts.map(a => {
         const label = RESOURCE_LABELS[a.resource] ?? a.resource;
-        const limit = a.threshold * a.num_cities;
+        const limit = a.resource === "uranium" ? a.threshold : a.threshold * a.num_cities;
         const excess = a.amount - limit;
         if (a.resource === "money") {
           return `• **${label}**: $${Math.round(a.amount).toLocaleString()} — limit $${Math.round(limit).toLocaleString()} ($${Math.round(excess).toLocaleString()} over)`;

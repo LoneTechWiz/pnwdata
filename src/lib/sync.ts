@@ -266,7 +266,9 @@ export async function sync(): Promise<void> {
           const threshold = alertConfig.thresholds[resource];
           if (threshold == null || threshold <= 0) continue;
           const amount = (nation[resource as keyof Nation] as number) ?? 0;
-          if (amount <= threshold * nation.num_cities) continue;
+          // Uranium uses a flat threshold; all other resources are per-city.
+          const limit = resource === "uranium" ? threshold : threshold * nation.num_cities;
+          if (amount <= limit) continue;
 
           const discordId = bknetDiscordIdMap.get(String(nation.id)) ?? null;
           insertAlert.run(nation.id, nation.nation_name, discord, discordId, resource, amount, nation.num_cities, threshold, now);
