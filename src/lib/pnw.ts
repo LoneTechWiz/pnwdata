@@ -34,6 +34,7 @@ export interface Nation {
   steel?: number;
   aluminum?: number;
   food?: number;
+  credits?: number;
   continent?: string;
   mass_irrigation?: boolean;
   international_trade_center?: boolean;

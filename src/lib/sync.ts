@@ -26,7 +26,7 @@ const ALLIANCE_QUERY = `
 const MEMBERS_QUERY = `
   query($alliance_id:[Int]) { nations(alliance_id:$alliance_id, first:500) { data {
     id nation_name leader_name discord score num_cities color last_active continent
-    money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food
+    money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food credits
     soldiers tanks aircraft ships missiles nukes
     vacation_mode_turns beige_turns alliance_position
     war_policy domestic_policy offensive_wars_count defensive_wars_count
