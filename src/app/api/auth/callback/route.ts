@@ -35,20 +35,33 @@ export async function GET(req: NextRequest) {
 
   const { access_token } = await tokenRes.json() as { access_token: string };
 
-  // Fetch guild member (role IDs + user info)
+  // Fetch the user's identity from the OAuth token
+  const userRes = await fetch("https://discord.com/api/v10/users/@me", {
+    headers: { Authorization: `Bearer ${access_token}` },
+  });
+
+  if (!userRes.ok) {
+    const body = await userRes.text();
+    console.error(`[auth/callback] user fetch failed: status=${userRes.status} body=${body}`);
+    return NextResponse.redirect(new URL("/login?error=token_exchange", baseUrl));
+  }
+
+  const user = await userRes.json() as { id: string; username: string; avatar: string | null };
+
+  // Look up the member via bot token (avoids aggressive rate limit on /users/@me/guilds/:id/member)
   const memberRes = await fetch(
-    `https://discord.com/api/v10/users/@me/guilds/${GUILD_ID}/member`,
-    { headers: { Authorization: `Bearer ${access_token}` } }
+    `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${user.id}`,
+    { headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` } }
   );
 
   if (!memberRes.ok) {
+    const body = await memberRes.text();
+    console.error(`[auth/callback] guild member fetch failed: status=${memberRes.status} guildId=${GUILD_ID} userId=${user.id} body=${body}`);
     return NextResponse.redirect(new URL("/login?error=not_member", baseUrl));
   }
 
-  const member = await memberRes.json() as {
-    roles: string[];
-    user: { id: string; username: string; avatar: string | null };
-  };
+  const memberData = await memberRes.json() as { roles: string[] };
+  const member = { roles: memberData.roles, user };
 
   // Fetch guild roles to resolve Emperor by name using bot token
   const rolesRes = await fetch(
