@@ -87,6 +87,20 @@ const GAME_INFO_QUERY = `
   { game_info { radiation { global north_america south_america europe africa asia australia } } }
 `;
 
+const ALL_MEMBERSHIPS_QUERY = `
+  query($page:Int) { nations(first:500, page:$page) {
+    paginatorInfo { currentPage lastPage }
+    data { id alliance_id alliance_join_date }
+  } }
+`;
+
+const ALL_ALLIANCES_QUERY = `
+  query($page:Int) { alliances(first:50, page:$page) {
+    paginatorInfo { currentPage lastPage }
+    data { id name acronym score color rank }
+  } }
+`;
+
 async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const res = await fetch(`${PNW_API}?api_key=${process.env.PNW_API_KEY}`, {
     method: "POST",
@@ -288,7 +302,124 @@ export async function sync(): Promise<void> {
   }
 }
 
-const g = globalThis as typeof globalThis & { _pnwSyncStarted?: boolean };
+interface RawNationMembership {
+  id: string;
+  alliance_id: string;
+  alliance_join_date: string | null;
+}
+
+interface RawAllianceInfo {
+  id: string;
+  name: string;
+  acronym: string | null;
+  score: number | null;
+  color: string | null;
+  rank: number | null;
+}
+
+export async function syncAllianceMemberships(): Promise<void> {
+  const { default: db } = await import("./db");
+  const now = Date.now();
+
+  console.log("[Recruitment Sync] Starting…");
+  db.prepare(`UPDATE recruitment_sync_status SET status='syncing' WHERE id=1`).run();
+
+  try {
+    const allNations: RawNationMembership[] = [];
+    let page = 1;
+    let lastPage = 1;
+    do {
+      const data = await gql<{
+        nations: {
+          paginatorInfo: { currentPage: number; lastPage: number };
+          data: RawNationMembership[];
+        };
+      }>(ALL_MEMBERSHIPS_QUERY, { page });
+      allNations.push(...data.nations.data);
+      lastPage = data.nations.paginatorInfo.lastPage;
+      page++;
+    } while (page <= lastPage);
+
+    const allAlliances: RawAllianceInfo[] = [];
+    let aPage = 1;
+    let aLast = 1;
+    do {
+      const data = await gql<{
+        alliances: {
+          paginatorInfo: { currentPage: number; lastPage: number };
+          data: RawAllianceInfo[];
+        };
+      }>(ALL_ALLIANCES_QUERY, { page: aPage });
+      allAlliances.push(...data.alliances.data);
+      aLast = data.alliances.paginatorInfo.lastPage;
+      aPage++;
+    } while (aPage <= aLast);
+
+    const upsertAlliance = db.prepare(
+      `INSERT INTO alliance_names (id, name, acronym, score, color, rank, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name=excluded.name, acronym=excluded.acronym, score=excluded.score, color=excluded.color, rank=excluded.rank, updated_at=excluded.updated_at`
+    );
+    db.transaction((items: RawAllianceInfo[]) => {
+      for (const a of items) {
+        upsertAlliance.run(Number(a.id), a.name, a.acronym ?? null, a.score ?? null, a.color ?? null, a.rank ?? null, now);
+      }
+    })(allAlliances);
+
+    const upsertMembership = db.prepare(
+      `INSERT INTO alliance_memberships (nation_id, alliance_id, join_date, first_seen, last_seen, left_at)
+       VALUES (?, ?, ?, ?, ?, NULL)
+       ON CONFLICT(nation_id, alliance_id, join_date) DO UPDATE SET last_seen=excluded.last_seen, left_at=NULL`
+    );
+
+    const seenKeys = new Set<string>();
+    let scanned = 0;
+    db.transaction((items: RawNationMembership[]) => {
+      for (const n of items) {
+        const allianceId = Number(n.alliance_id);
+        if (!allianceId || !n.alliance_join_date) continue;
+        const joinMs = Date.parse(n.alliance_join_date);
+        if (!Number.isFinite(joinMs)) continue;
+        const nationId = Number(n.id);
+        upsertMembership.run(nationId, allianceId, joinMs, now, now);
+        seenKeys.add(`${nationId}:${allianceId}:${joinMs}`);
+        scanned++;
+      }
+    })(allNations);
+
+    // Close memberships not seen this run.
+    const activeRows = db.prepare(
+      `SELECT nation_id, alliance_id, join_date, last_seen FROM alliance_memberships WHERE left_at IS NULL`
+    ).all() as Array<{ nation_id: number; alliance_id: number; join_date: number; last_seen: number }>;
+
+    const closeMembership = db.prepare(
+      `UPDATE alliance_memberships SET left_at=? WHERE nation_id=? AND alliance_id=? AND join_date=?`
+    );
+    db.transaction((rows: typeof activeRows) => {
+      for (const r of rows) {
+        const key = `${r.nation_id}:${r.alliance_id}:${r.join_date}`;
+        if (!seenKeys.has(key)) {
+          // Use the previous last_seen as a more accurate left timestamp than `now`.
+          closeMembership.run(r.last_seen, r.nation_id, r.alliance_id, r.join_date);
+        }
+      }
+    })(activeRows);
+
+    const existing = db.prepare(`SELECT first_snapshot_at FROM recruitment_sync_status WHERE id=1`).get() as { first_snapshot_at: number | null } | undefined;
+    const firstSnapshot = existing?.first_snapshot_at ?? now;
+    db.prepare(
+      `UPDATE recruitment_sync_status SET last_synced_at=?, status='success', error=NULL,
+       nations_scanned=?, alliances_scanned=?, first_snapshot_at=? WHERE id=1`
+    ).run(now, scanned, allAlliances.length, firstSnapshot);
+
+    console.log(`[Recruitment Sync] Done — ${scanned} memberships, ${allAlliances.length} alliances`);
+  } catch (err) {
+    console.error("[Recruitment Sync] Failed:", err);
+    db.prepare(`UPDATE recruitment_sync_status SET status='error', error=? WHERE id=1`).run(String(err));
+    throw err;
+  }
+}
+
+const g = globalThis as typeof globalThis & { _pnwSyncStarted?: boolean; _recruitmentSyncStarted?: boolean };
 
 export function startSyncLoop(): void {
   if (g._pnwSyncStarted) return;
@@ -298,5 +429,32 @@ export function startSyncLoop(): void {
   setInterval(
     () => sync().catch(err => console.error("[PnW Sync] Periodic sync failed:", err)),
     10 * 60 * 1000
+  );
+
+  startRecruitmentSyncLoop();
+}
+
+export function startRecruitmentSyncLoop(): void {
+  if (g._recruitmentSyncStarted) return;
+  g._recruitmentSyncStarted = true;
+
+  // Run once on boot if last sync was > 23h ago (or never), then every 24h.
+  (async () => {
+    try {
+      const { default: db } = await import("./db");
+      const row = db.prepare(`SELECT last_synced_at FROM recruitment_sync_status WHERE id=1`).get() as { last_synced_at: number | null } | undefined;
+      const last = row?.last_synced_at ?? 0;
+      const age = Date.now() - last;
+      if (age >= 23 * 60 * 60 * 1000) {
+        await syncAllianceMemberships();
+      }
+    } catch (err) {
+      console.error("[Recruitment Sync] Initial run failed:", err);
+    }
+  })();
+
+  setInterval(
+    () => syncAllianceMemberships().catch(err => console.error("[Recruitment Sync] Periodic failed:", err)),
+    24 * 60 * 60 * 1000
   );
 }

@@ -104,6 +104,40 @@ db.exec(`
     sent INTEGER NOT NULL DEFAULT 0,
     sent_at INTEGER
   );
+
+  CREATE TABLE IF NOT EXISTS alliance_memberships (
+    nation_id INTEGER NOT NULL,
+    alliance_id INTEGER NOT NULL,
+    join_date INTEGER NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    left_at INTEGER,
+    PRIMARY KEY (nation_id, alliance_id, join_date)
+  );
+  CREATE INDEX IF NOT EXISTS idx_memberships_alliance ON alliance_memberships(alliance_id);
+  CREATE INDEX IF NOT EXISTS idx_memberships_join_date ON alliance_memberships(join_date);
+  CREATE INDEX IF NOT EXISTS idx_memberships_left_at ON alliance_memberships(left_at);
+
+  CREATE TABLE IF NOT EXISTS alliance_names (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    acronym TEXT,
+    score REAL,
+    color TEXT,
+    rank INTEGER,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS recruitment_sync_status (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_synced_at INTEGER,
+    status TEXT NOT NULL DEFAULT 'never',
+    error TEXT,
+    nations_scanned INTEGER DEFAULT 0,
+    alliances_scanned INTEGER DEFAULT 0,
+    first_snapshot_at INTEGER
+  );
+  INSERT OR IGNORE INTO recruitment_sync_status (id, status) VALUES (1, 'never');
 `);
 
 export default db;
