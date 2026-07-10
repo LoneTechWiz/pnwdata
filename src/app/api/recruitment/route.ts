@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import db from "@/lib/db";
+import {
+  recruitsIn,
+  retentionFor,
+  retentionPercent,
+  type MembershipRow,
+} from "@/lib/recruitment-stats";
 
 export const dynamic = "force-dynamic";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface AllianceRow {
   id: number;
@@ -12,13 +16,6 @@ interface AllianceRow {
   score: number | null;
   color: string | null;
   rank: number | null;
-}
-
-interface MembershipRow {
-  nation_id: number;
-  alliance_id: number;
-  join_date: number;
-  left_at: number | null;
 }
 
 export async function GET() {
@@ -56,34 +53,11 @@ export async function GET() {
     list.push(m);
   }
 
-  // For retention to be reliable, only count cohort memberships whose join_date is
-  // on or after first_snapshot_at — otherwise we may have missed earlier departures.
-  function retentionFor(rows: MembershipRow[], days: number) {
-    const cutoff = now - days * DAY_MS;
-    let numerator = 0;
-    let denominator = 0;
-    for (const m of rows) {
-      if (m.join_date > cutoff) continue; // cohort must have had time to reach N days
-      if (firstSnapshotAt != null && m.join_date < firstSnapshotAt) continue;
-      denominator++;
-      const retainedUntil = m.left_at ?? now;
-      if (retainedUntil - m.join_date >= days * DAY_MS) numerator++;
-    }
-    return { numerator, denominator };
-  }
-
-  function recruitsIn(rows: MembershipRow[], days: number): number {
-    const cutoff = now - days * DAY_MS;
-    let count = 0;
-    for (const m of rows) if (m.join_date >= cutoff) count++;
-    return count;
-  }
-
-  function pct(b: { numerator: number; denominator: number }) {
+  function pct(bucket: ReturnType<typeof retentionFor>) {
     return {
-      numerator: b.numerator,
-      denominator: b.denominator,
-      percent: b.denominator > 0 ? b.numerator / b.denominator : null,
+      numerator: bucket.numerator,
+      denominator: bucket.denominator,
+      percent: retentionPercent(bucket),
     };
   }
 
@@ -98,13 +72,13 @@ export async function GET() {
       color: a.color,
       rank: a.rank,
       active_members: active,
-      recruits_7d: recruitsIn(memberRows, 7),
-      recruits_30d: recruitsIn(memberRows, 30),
-      recruits_60d: recruitsIn(memberRows, 60),
-      recruits_90d: recruitsIn(memberRows, 90),
-      retention_30d: pct(retentionFor(memberRows, 30)),
-      retention_60d: pct(retentionFor(memberRows, 60)),
-      retention_90d: pct(retentionFor(memberRows, 90)),
+      recruits_7d: recruitsIn(memberRows, 7, now),
+      recruits_30d: recruitsIn(memberRows, 30, now),
+      recruits_60d: recruitsIn(memberRows, 60, now),
+      recruits_90d: recruitsIn(memberRows, 90, now),
+      retention_30d: pct(retentionFor(memberRows, 30, now, firstSnapshotAt)),
+      retention_60d: pct(retentionFor(memberRows, 60, now, firstSnapshotAt)),
+      retention_90d: pct(retentionFor(memberRows, 90, now, firstSnapshotAt)),
     };
   });
 

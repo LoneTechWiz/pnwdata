@@ -1,4 +1,6 @@
 import type { Nation, War, BankRec, Alliance } from "./pnw";
+import { resolveNationDiscord } from "./discord-username";
+import { exceedsStockpileThreshold } from "./stockpile";
 import { readFileSync, existsSync } from "fs";
 import path from "path";
 
@@ -209,18 +211,6 @@ export async function sync(): Promise<void> {
       db.prepare(`DELETE FROM stockpile_alert_queue WHERE sent = 1 AND sent_at < ?`)
         .run(now - 7 * 24 * 60 * 60 * 1000);
 
-      // Build discord username map. BK Net is primary but may lag behind Discord's
-      // new username system (still returning legacy "User#1234" format). If BK Net
-      // has a legacy discriminator and PnW has a current username, prefer PnW.
-      // Strip trailing #0 (new-format placeholder discriminator) from either source.
-      function normalizeDiscord(raw: string): string {
-        return raw.replace(/#0$/, "");
-      }
-      function isLegacyDiscord(raw: string): boolean {
-        const m = raw.match(/#(\d+)$/);
-        return m != null && m[1] !== "0" && m[1] !== "0000";
-      }
-
       const bknetRows = db.prepare(`SELECT id, data FROM bknet_members`).all() as Array<{ id: number; data: string }>;
       const bknetDiscordRaw = new Map<string, string>();
       const bknetDiscordIdMap = new Map<string, string>();
@@ -234,15 +224,11 @@ export async function sync(): Promise<void> {
 
       const discordMap = new Map<string, string>();
       for (const nation of nations) {
-        const bknet = bknetDiscordRaw.get(String(nation.id));
-        const pnw = nation.discord?.trim() || null;
-        if (bknet && !isLegacyDiscord(bknet)) {
-          discordMap.set(String(nation.id), normalizeDiscord(bknet));
-        } else if (pnw) {
-          discordMap.set(String(nation.id), normalizeDiscord(pnw));
-        } else if (bknet) {
-          discordMap.set(String(nation.id), bknet);
-        }
+        const resolved = resolveNationDiscord(
+          bknetDiscordRaw.get(String(nation.id)),
+          nation.discord
+        );
+        if (resolved) discordMap.set(String(nation.id), resolved);
       }
 
       // Build set of blockaded nation IDs from active wars
@@ -278,11 +264,9 @@ export async function sync(): Promise<void> {
           if (isBlockaded && resource !== "money") continue;
 
           const threshold = alertConfig.thresholds[resource];
-          if (threshold == null || threshold <= 0) continue;
+          if (threshold == null) continue;
           const amount = (nation[resource as keyof Nation] as number) ?? 0;
-          // Uranium uses a flat threshold; all other resources are per-city.
-          const limit = resource === "uranium" ? threshold : threshold * nation.num_cities;
-          if (amount <= limit) continue;
+          if (!exceedsStockpileThreshold(amount, threshold, resource, nation.num_cities)) continue;
 
           const discordId = bknetDiscordIdMap.get(String(nation.id)) ?? null;
           insertAlert.run(nation.id, nation.nation_name, discord, discordId, resource, amount, nation.num_cities, threshold, now);

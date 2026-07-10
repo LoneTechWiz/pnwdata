@@ -5,7 +5,7 @@ import fs from "fs";
 const DATA_DIR = path.join(process.cwd(), "data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, "pnw.db"));
+const db = new Database(process.env.PNW_DB_PATH ?? path.join(DATA_DIR, "pnw.db"));
 
 db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");

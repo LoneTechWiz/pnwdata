@@ -2,6 +2,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMembers, fetchBknetMembers, fetchTradePrices, fetchGameInfo, TradePrice, GameInfo } from "@/lib/pnw";
+import {
+  baseDisease,
+  diseaseAfterHospitals,
+  hospitalsToZeroDisease,
+} from "@/lib/pnw-formulas";
 import { AppShell } from "@/components/AppShell";
 import { Search, ChevronDown, ChevronUp, Zap, TrendingUp } from "lucide-react";
 
@@ -131,20 +136,7 @@ function computePowerDailyCost(infra: number, powerType: PowerType, prices: Reco
   return plants * pw.dailyCost + fuelCost;
 }
 
-// Disease rate (%) before hospitals: max(0, (infra/100)^2 * 0.1 + infra/100 - 25) / 100
-function baseDisease(infra: number): number {
-  return Math.max(0, (Math.pow(infra / 100, 2) * 0.1 + infra / 100 - 25) / 100);
-}
-
-// Disease rate after hospitals (each hospital removes 2.5 percentage points)
-function diseaseAfterHospitals(infra: number, hospitals: number): number {
-  return Math.max(0, baseDisease(infra) - hospitals * 2.5);
-}
-
-// How many hospitals needed to bring disease to 0
-export function hospitalsToZeroDisease(infra: number): number {
-  return Math.ceil(baseDisease(infra) / 2.5);
-}
+export { hospitalsToZeroDisease };
 
 // Daily commerce income given current commerce % and population modifier from disease
 // Formula: ((commerce/50)*0.725 + 0.725) * (infra*100 * popMod) * 12

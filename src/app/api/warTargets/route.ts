@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
 import db from "@/lib/db";
+import {
+  attackLootValue,
+  avgInfraPerCity,
+  beigeAverage,
+  recordBeigeLoss,
+  warTargetScoreRange,
+  type LootAttack,
+  type TradePrices,
+} from "@/lib/war-targets";
 
 export const dynamic = "force-dynamic";
 
@@ -173,8 +182,7 @@ export async function GET(request: NextRequest) {
   const yourLeader = yourNation.leader_name;
   const yourDiscord = yourNation.discord ?? null;
 
-  const minScore = Math.floor(yourScore * 0.75);
-  const maxScore = Math.ceil(yourScore * 4 / 3);
+  const { minScore, maxScore } = warTargetScoreRange(yourScore);
   const atWarWith = new Set(warsData.wars.data.map(w => Number(w.def_id)));
 
   // Fetch alliance members with allSettled so a single 503 doesn't kill the whole request
@@ -198,27 +206,11 @@ export async function GET(request: NextRequest) {
     .filter(n => n.vacation_mode_turns === 0)
     .filter(n => n.beige_turns === 0);
 
-  // Load trade prices from local DB for resource valuation
-  type Prices = { coal: number; oil: number; uranium: number; iron: number; bauxite: number; lead: number; gasoline: number; munitions: number; steel: number; aluminum: number; food: number };
-  let prices: Prices | null = null;
+  let prices: TradePrices | null = null;
   try {
     const row = db.prepare("SELECT data FROM trade_prices WHERE id = 1").get() as { data: string } | undefined;
-    if (row) prices = JSON.parse(row.data) as Prices;
+    if (row) prices = JSON.parse(row.data) as TradePrices;
   } catch { /* no prices available */ }
-
-  type LootAttack = { money_looted: number; coal_looted: number; oil_looted: number; uranium_looted: number; iron_looted: number; bauxite_looted: number; lead_looted: number; gasoline_looted: number; munitions_looted: number; steel_looted: number; aluminum_looted: number; food_looted: number };
-
-  function attackLootValue(attacks: LootAttack[]): number {
-    const p = prices;
-    return attacks.reduce((sum, a) => {
-      const resourceValue = !p ? 0
-        : a.coal_looted * p.coal + a.oil_looted * p.oil + a.uranium_looted * p.uranium
-        + a.iron_looted * p.iron + a.bauxite_looted * p.bauxite + a.lead_looted * p.lead
-        + a.gasoline_looted * p.gasoline + a.munitions_looted * p.munitions
-        + a.steel_looted * p.steel + a.aluminum_looted * p.aluminum + a.food_looted * p.food;
-      return sum + a.money_looted + resourceValue;
-    }, 0);
-  }
 
   // Fetch beige loot: paginate through all completed wars involving target nations,
   // recording the most recent war each target LOST (beiged as either attacker or defender).
@@ -227,23 +219,6 @@ export async function GET(request: NextRequest) {
   const beigeMap = new Map<number, { loot: number; date: string; allLoots: number[] }>();
 
   type BeigeWar = { date: string; att_id: string; def_id: string; winner_id: string; attacks: LootAttack[] };
-
-  function recordIfLoss(w: BeigeWar) {
-    if (w.winner_id === "0") return;
-    const loserId = w.winner_id === w.att_id ? Number(w.def_id) : Number(w.att_id);
-    if (!targetIdSet.has(loserId)) return;
-    const loot = attackLootValue(w.attacks);
-    const existing = beigeMap.get(loserId);
-    if (!existing) {
-      beigeMap.set(loserId, { loot, date: w.date, allLoots: [loot] });
-    } else {
-      existing.allLoots.push(loot);
-      if (w.date > existing.date) {
-        existing.loot = loot;
-        existing.date = w.date;
-      }
-    }
-  }
 
   if (targetIds.length > 0) {
     try {
@@ -254,7 +229,7 @@ export async function GET(request: NextRequest) {
           BEIGE_WARS_QUERY, { ids: targetIds, after, page }
         );
         const wars = beigeData.wars.data;
-        for (const w of wars) recordIfLoss(w);
+        for (const w of wars) recordBeigeLoss(beigeMap, w, targetIdSet, prices);
         if (wars.length < 500) break;
       }
     } catch (e) {
@@ -272,9 +247,7 @@ export async function GET(request: NextRequest) {
         alliance_name: n.alliance?.name ?? "Unknown",
         score: n.score,
         num_cities: n.num_cities,
-        avg_infra: n.cities.length > 0
-          ? Math.round(n.cities.reduce((s, c) => s + c.infrastructure, 0) / n.cities.length)
-          : 0,
+        avg_infra: avgInfraPerCity(n.cities),
         soldiers: n.soldiers,
         tanks: n.tanks,
         aircraft: n.aircraft,
@@ -285,7 +258,7 @@ export async function GET(request: NextRequest) {
         beige_turns: n.beige_turns,
         beige_loot: beige?.loot ?? null,
         beige_date: beige?.date ?? null,
-        beige_avg: beige ? Math.round(beige.allLoots.reduce((s, v) => s + v, 0) / beige.allLoots.length) : null,
+        beige_avg: beige ? beigeAverage(beige.allLoots) : null,
         beige_count: beige?.allLoots.length ?? null,
         last_active: n.last_active,
       };
