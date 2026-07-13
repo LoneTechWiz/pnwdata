@@ -10,7 +10,6 @@ import {
 
 const nav = [
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
-  { label: "City Build", href: "/optimizer", icon: Calculator },
 ];
 
 const hiddenNav = [
@@ -32,6 +31,7 @@ const hiddenNav = [
   { label: "Beige Watch", href: "/beige-watch", icon: ShieldOff },
   { label: "AI Targets", href: "/ai-targets", icon: Brain },
   { label: "Tiering", href: "/tiering", icon: Layers },
+  { label: "City Build", href: "/optimizer", icon: Calculator },
   // Economy
   { label: "Infra & Land", href: "/infra", icon: Building2 },
   { label: "Bank", href: "/bank", icon: Landmark },

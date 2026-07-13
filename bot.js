@@ -1,17 +1,23 @@
 // bot.js — Discord bot
 // Run with: node bot.js
 import { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } from "discord.js";
-import { readFileSync } from "fs";
-import Database from "better-sqlite3";
+import "dotenv/config";
+import { existsSync, readFileSync } from "fs";
+import { createClient } from "@supabase/supabase-js";
 
 // Load .env.local manually
-for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-  const [key, ...rest] = line.split("=");
-  if (key && rest.length) process.env[key.trim()] ??= rest.join("=").trim();
+if (existsSync(".env.local")) {
+  for (const line of readFileSync(".env.local", "utf8").split("\n")) {
+    const [key, ...rest] = line.split("=");
+    if (key && rest.length) process.env[key.trim()] ??= rest.join("=").trim();
+  }
 }
 
-const db = new Database("data/pnw.db", { readonly: true });
-const dbRW = new Database("data/pnw.db"); // read-write for marking alerts sent
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
 
 const client = new Client({
   intents: [
@@ -42,18 +48,15 @@ async function resolveGuildUsernames() {
   if (!guild) { console.warn("[Discord Resolved] Guild not in cache:", process.env.DISCORD_GUILD_ID); return; }
   await guild.members.fetch();
   const now = Date.now();
-  const stmt = dbRW.prepare(`INSERT OR REPLACE INTO discord_resolved (discord_id, username, updated_at) VALUES (?, ?, ?)`);
-  const upsertAll = dbRW.transaction((members) => {
-    for (const [id, member] of members) {
-      stmt.run(id, member.user.username, now);
-    }
-  });
-  upsertAll(guild.members.cache);
+  const rows = [...guild.members.cache].map(([id, member]) => ({ discord_id: id, username: member.user.username, updated_at: now }));
+  const { error } = await supabase.from("discord_resolved").upsert(rows);
+  if (error) throw error;
   console.log(`[Discord Resolved] Cached ${guild.members.cache.size} usernames`);
 }
 
 async function sendStockpileAlerts() {
-  const unsent = db.prepare(`SELECT * FROM stockpile_alert_queue WHERE sent = 0`).all();
+  const { data: unsent, error } = await supabase.from("stockpile_alert_queue").select("*").eq("sent", 0);
+  if (error) throw error;
   if (unsent.length === 0) return;
 
   // Group by discord_id (preferred) or discord_username as fallback key
@@ -61,8 +64,7 @@ async function sendStockpileAlerts() {
   for (const alert of unsent) {
     const key = alert.discord_id || alert.discord_username;
     if (!key) {
-      dbRW.prepare(`UPDATE stockpile_alert_queue SET sent = 1, sent_at = ? WHERE id = ?`)
-        .run(Date.now(), alert.id);
+      await supabase.from("stockpile_alert_queue").update({ sent: 1, sent_at: Date.now() }).eq("id", alert.id);
       continue;
     }
     if (!byUser.has(key)) byUser.set(key, []);
@@ -93,8 +95,7 @@ async function sendStockpileAlerts() {
       if (!user) {
         console.warn(`[Stockpile Alerts] Could not resolve user for nation ${alerts[0].nation_name} (id=${discordId}, username=${username})`);
         for (const alert of alerts) {
-          dbRW.prepare(`UPDATE stockpile_alert_queue SET sent = 1, sent_at = ? WHERE id = ?`)
-            .run(Date.now(), alert.id);
+          await supabase.from("stockpile_alert_queue").update({ sent: 1, sent_at: Date.now() }).eq("id", alert.id);
         }
         continue;
       }
@@ -116,8 +117,7 @@ async function sendStockpileAlerts() {
       );
 
       for (const alert of alerts) {
-        dbRW.prepare(`UPDATE stockpile_alert_queue SET sent = 1, sent_at = ? WHERE id = ?`)
-          .run(Date.now(), alert.id);
+        await supabase.from("stockpile_alert_queue").update({ sent: 1, sent_at: Date.now() }).eq("id", alert.id);
       }
       console.log(`[Stockpile Alerts] DMed ${user.username} about ${alerts.length} resource(s)`);
     } catch (err) {
@@ -218,9 +218,9 @@ client.on("interactionCreate", async (interaction) => {
 async function handleTargets(interaction) {
   const discordUsername = interaction.user.username;
 
-  const row = db.prepare(
-    `SELECT id FROM nations WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?) LIMIT 1`
-  ).get(discordUsername);
+  const { data: nations, error } = await supabase.from("nations").select("id, data");
+  if (error) throw error;
+  const row = nations.find(({ data }) => String(data?.discord ?? "").toLowerCase() === discordUsername.toLowerCase());
 
   if (!row) {
     await interaction.editReply("Couldn't find a nation linked to your Discord account. Make sure your Discord username matches what's set in Politics and War.");

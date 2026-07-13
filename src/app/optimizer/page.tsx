@@ -1,11 +1,20 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMembers, fetchBknetMembers, fetchTradePrices, fetchGameInfo, TradePrice, GameInfo } from "@/lib/pnw";
 import {
+  averageCityAgeMultiplier,
   baseDisease,
-  diseaseAfterHospitals,
+  cityPopulation,
+  commerceIncome,
+  dailyCivilianFoodUsage,
+  dailyFoodProduction,
+  dailyNuclearUraniumUsage,
   hospitalsToZeroDisease,
+  openMarketsMultiplier,
+  radiationFoodMultiplier,
+  seasonalFoodMultiplier,
+  specializationMultiplier,
 } from "@/lib/pnw-formulas";
 import { AppShell } from "@/components/AppShell";
 import { Search, ChevronDown, ChevronUp, Zap, TrendingUp } from "lucide-react";
@@ -16,7 +25,8 @@ const POWER_TYPES = {
   coal:    { name: "Coal",    infraPerPlant: 500,  dailyCost: 1200,  fuel: "coal"    as const, fuelPerDay: 1.2 },
   oil:     { name: "Oil",     infraPerPlant: 500,  dailyCost: 1800,  fuel: "oil"     as const, fuelPerDay: 1.2 },
   wind:    { name: "Wind",    infraPerPlant: 250,  dailyCost: 500,   fuel: null,               fuelPerDay: 0   },
-  nuclear: { name: "Nuclear", infraPerPlant: 2000, dailyCost: 10500, fuel: "uranium" as const, fuelPerDay: 1.8 },
+  // Nuclear fuel scales with infrastructure and is handled by dailyNuclearUraniumUsage().
+  nuclear: { name: "Nuclear", infraPerPlant: 2000, dailyCost: 10500, fuel: "uranium" as const, fuelPerDay: 0 },
 } as const;
 type PowerType = keyof typeof POWER_TYPES;
 
@@ -72,21 +82,6 @@ const RESOURCE_IMPS: ResourceImp[] = [
   { name: "Uranium Mine", amount: 3, produces: "uranium", dailyCost: 5000, max: 5  },
 ];
 
-// ── Pollution values (per improvement) ──────────────────────────────────────
-
-const IMPROVEMENT_POLLUTION: Record<string, number> = {
-  // Commerce
-  "Stadium": 0, "Shopping Mall": 0, "Subway": -45, "Bank": 0, "Supermarket": 0,
-  // Manufacturing
-  "Steel Mill": 40, "Aluminum Refinery": 40, "Munitions Factory": 35, "Oil Refinery": 40,
-  // Raw resources
-  "Coal Mine": 12, "Oil Well": 12, "Iron Mine": 12, "Lead Mine": 12, "Bauxite Mine": 12,
-  "Uranium Mine": 12, "Farm": 2,
-};
-const POWER_POLLUTION: Record<PowerType, number> = { coal: 8, oil: 6, wind: 0, nuclear: 0 };
-const MIL_POLLUTION: Record<string, number> = { barracks: 0, factories: 3, hangars: 0, dockyards: 0 };
-const CIVIL_POLLUTION: Record<string, number> = { hospitals: 4, subway: -45, police_stations: 1, recycling_centers: -70 };
-
 // ── Resource prices ──────────────────────────────────────────────────────────
 
 const FALLBACK_PRICES: Record<string, number> = {
@@ -129,30 +124,75 @@ function computePowerSlots(infra: number, powerType: PowerType): number {
   return Math.ceil(infra / POWER_TYPES[powerType].infraPerPlant);
 }
 
-function computePowerDailyCost(infra: number, powerType: PowerType, prices: Record<string, number>): number {
+function computePowerDailyCost(
+  infra: number,
+  powerType: PowerType,
+  prices: Record<string, number>,
+  upkeepMultiplier = 1,
+): number {
   const pw = POWER_TYPES[powerType];
   const plants = computePowerSlots(infra, powerType);
-  const fuelCost = pw.fuel ? pw.fuelPerDay * plants * prices[pw.fuel] : 0;
-  return plants * pw.dailyCost + fuelCost;
+  const fuelCost = powerType === "nuclear"
+    ? dailyNuclearUraniumUsage(infra) * prices.uranium
+    : pw.fuel ? pw.fuelPerDay * plants * prices[pw.fuel] : 0;
+  return plants * pw.dailyCost * upkeepMultiplier + fuelCost;
 }
 
 export { hospitalsToZeroDisease };
 
-// Daily commerce income given current commerce % and population modifier from disease
-// Formula: ((commerce/50)*0.725 + 0.725) * (infra*100 * popMod) * 12
-function commerceIncome(infra: number, commercePct: number, popMod = 1): number {
-  const population = infra * 100 * popMod;
-  const avgIncome = (commercePct / 50) * 0.725 + 0.725;
-  return population * avgIncome * 12;
+export interface OptimizerProjects {
+  massIrrigation: boolean;
+  uraniumEnrichment: boolean;
+  ironWorks: boolean;
+  bauxiteWorks: boolean;
+  armsStockpile: boolean;
+  emergencyGasolineReserve: boolean;
+  greenTechnologies: boolean;
+  clinicalResearchCenter: boolean;
+  specializedPoliceTraining: boolean;
+  recyclingInitiative: boolean;
+  falloutShelter: boolean;
+  internationalTradeCenter: boolean;
+  telecommunicationsSatellite: boolean;
+  governmentSupportAgency: boolean;
+  bureauOfDomesticAffairs: boolean;
 }
 
-// Marginal income gain from adding `addedPct` commerce (capped at maxCommerce)
-function marginalCommerceIncome(infra: number, currentPct: number, addedPct: number, maxCommerce: number, popMod = 1): number {
-  const effective = Math.min(currentPct + addedPct, maxCommerce) - currentPct;
-  if (effective <= 0) return 0;
-  const population = infra * 100 * popMod;
-  return (effective / 50) * 0.725 * population * 12;
-}
+const DEFAULT_PROJECTS: OptimizerProjects = {
+  massIrrigation: false,
+  uraniumEnrichment: false,
+  ironWorks: false,
+  bauxiteWorks: false,
+  armsStockpile: false,
+  emergencyGasolineReserve: false,
+  greenTechnologies: false,
+  clinicalResearchCenter: false,
+  specializedPoliceTraining: false,
+  recyclingInitiative: false,
+  falloutShelter: false,
+  internationalTradeCenter: false,
+  telecommunicationsSatellite: false,
+  governmentSupportAgency: false,
+  bureauOfDomesticAffairs: false,
+};
+
+const PROJECT_OPTIONS: Array<{ key: keyof OptimizerProjects; label: string }> = [
+  { key: "massIrrigation", label: "Mass Irrigation" },
+  { key: "uraniumEnrichment", label: "Uranium Enrichment" },
+  { key: "ironWorks", label: "Iron Works" },
+  { key: "bauxiteWorks", label: "Bauxite Works" },
+  { key: "armsStockpile", label: "Arms Stockpile" },
+  { key: "emergencyGasolineReserve", label: "Emergency Gasoline Reserve" },
+  { key: "greenTechnologies", label: "Green Technologies" },
+  { key: "clinicalResearchCenter", label: "Clinical Research Center" },
+  { key: "specializedPoliceTraining", label: "Specialized Police Training" },
+  { key: "recyclingInitiative", label: "Recycling Initiative" },
+  { key: "falloutShelter", label: "Fallout Shelter" },
+  { key: "internationalTradeCenter", label: "International Trade Center" },
+  { key: "telecommunicationsSatellite", label: "Telecommunications Satellite" },
+  { key: "governmentSupportAgency", label: "Government Support Agency" },
+  { key: "bureauOfDomesticAffairs", label: "Bureau of Domestic Affairs" },
+];
 
 interface BuildEntry {
   category: "power" | "commerce" | "manufacturing" | "resource" | "civil";
@@ -172,6 +212,9 @@ interface OptimizerResult {
   dailyCommerce: number;
   dailyCommerceNoDiseaseReduction: number;
   dailyProduction: number;
+  dailyFoodProduced: number;
+  dailyFoodConsumed: number;
+  dailyFoodConsumptionCost: number;
   dailyPowerCost: number;
   dailyCommerceCost: number;
   dailyProductionCost: number;
@@ -187,6 +230,9 @@ interface OptimizerResult {
   correctedDiseasePct: number;
   crimePct: number;
   effectivePopMod: number;
+  population: number;
+  netProfit: number;
+  unfilledSlots: number;
   build: BuildEntry[];
   improvementOptions: ImprovementOption[];
 }
@@ -200,204 +246,440 @@ interface ImprovementOption {
   detail: string;
 }
 
-// Total food from n farms in a city:
-// specialization bonus = 1 + (0.5 * (n-1) / 19)
-// total = round(n * bonus * landRate, 2)
-function farmTotalFood(n: number, landRate: number): number {
-  if (n <= 0) return 0;
-  const bonus = 1 + (0.5 * (n - 1)) / 19;
-  return Math.round(n * bonus * landRate * 100) / 100;
+interface ProductionState {
+  slots: number;
+  pollution: number;
+  revenue: number;
+  cost: number;
+  foodProduced: number;
+  entries: BuildEntry[];
 }
 
-function getImpMax(name: string): number {
-  return COMMERCE_IMPS.find(c => c.name === name)?.max
-    ?? MANUF_IMPS.find(m => m.name === name)?.max
-    ?? RESOURCE_IMPS.find(r => r.name === name)?.max
-    ?? CIVIL_BUILDINGS.find(b => b.name === name)?.max
-    ?? (name === "Farm" ? 20 : Infinity);
+interface CommerceState {
+  slots: number;
+  commerce: number;
+  cost: number;
+  counts: Record<string, number>;
 }
 
-function computeOptimalBuild(
+function productionEntry(
+  name: string,
+  count: number,
+  land: number,
+  prices: Record<string, number>,
+  projects: OptimizerProjects,
+  seasonMultiplier: number,
+  radiationMultiplier: number,
+): ProductionState {
+  if (count === 0) {
+    return { slots: 0, pollution: 0, revenue: 0, cost: 0, foodProduced: 0, entries: [] };
+  }
+
+  if (name === "Farm") {
+    const foodProduced = dailyFoodProduction(
+      count,
+      land,
+      projects.massIrrigation,
+      seasonMultiplier,
+      radiationMultiplier,
+    );
+    const upkeep = count * 300 * (projects.greenTechnologies ? 0.9 : 1);
+    return {
+      slots: count,
+      pollution: count * (projects.greenTechnologies ? 1 : 2),
+      revenue: foodProduced * prices.food,
+      cost: upkeep,
+      foodProduced,
+      entries: [{ category: "resource", name, count, dailyRevenue: foodProduced * prices.food, dailyCost: upkeep }],
+    };
+  }
+
+  const manufacturing = MANUF_IMPS.find((item) => item.name === name);
+  if (manufacturing) {
+    const specialization = specializationMultiplier(count, manufacturing.max);
+    let outputMultiplier = 1;
+    let inputMultiplier = 1;
+    if (name === "Steel Mill" && projects.ironWorks) outputMultiplier = inputMultiplier = 1.36;
+    if (name === "Aluminum Refinery" && projects.bauxiteWorks) outputMultiplier = inputMultiplier = 1.36;
+    if (name === "Munitions Factory" && projects.armsStockpile) outputMultiplier = 1.2;
+    if (name === "Oil Refinery" && projects.emergencyGasolineReserve) outputMultiplier = inputMultiplier = 2;
+
+    const output = manufacturing.output * count * specialization * outputMultiplier;
+    const revenue = output * prices[manufacturing.produces];
+    const inputCost = Object.entries(manufacturing.inputs).reduce(
+      (sum, [resource, amount]) => sum + amount * count * specialization * inputMultiplier * prices[resource],
+      0,
+    );
+    const upkeep = manufacturing.dailyCost * count * (projects.greenTechnologies ? 0.9 : 1);
+    const cost = inputCost + upkeep;
+    return {
+      slots: count,
+      pollution: count * (projects.greenTechnologies ? 30 : 40),
+      revenue,
+      cost,
+      foodProduced: 0,
+      entries: [{ category: "manufacturing", name, count, dailyRevenue: revenue, dailyCost: cost }],
+    };
+  }
+
+  const resource = RESOURCE_IMPS.find((item) => item.name === name);
+  if (!resource) throw new Error(`Unknown production improvement: ${name}`);
+  const specialization = specializationMultiplier(count, resource.max);
+  const projectMultiplier = name === "Uranium Mine" && projects.uraniumEnrichment ? 2 : 1;
+  const output = resource.amount * count * specialization * projectMultiplier;
+  const revenue = output * prices[resource.produces];
+  const upkeep = resource.dailyCost * count * (projects.greenTechnologies ? 0.9 : 1);
+  return {
+    slots: count,
+    pollution: count * 12,
+    revenue,
+    cost: upkeep,
+    foodProduced: 0,
+    entries: [{ category: "resource", name, count, dailyRevenue: revenue, dailyCost: upkeep }],
+  };
+}
+
+function buildProductionStates(
+  maxSlots: number,
+  land: number,
+  prices: Record<string, number>,
+  projects: OptimizerProjects,
+  seasonMultiplier: number,
+  radiationMultiplier: number,
+): Map<number, ProductionState[]> {
+  const groups = [
+    ...MANUF_IMPS.map((item) => ({ name: item.name, max: item.max })),
+    ...RESOURCE_IMPS.map((item) => ({ name: item.name, max: item.max })),
+    { name: "Farm", max: 20 },
+  ];
+  let states = new Map<string, ProductionState>();
+  states.set("0|0", { slots: 0, pollution: 0, revenue: 0, cost: 0, foodProduced: 0, entries: [] });
+
+  for (const group of groups) {
+    const next = new Map<string, ProductionState>();
+    for (const state of states.values()) {
+      const maxCount = Math.min(group.max, maxSlots - state.slots);
+      for (let count = 0; count <= maxCount; count++) {
+        const option = productionEntry(
+          group.name,
+          count,
+          land,
+          prices,
+          projects,
+          seasonMultiplier,
+          radiationMultiplier,
+        );
+        const combined: ProductionState = {
+          slots: state.slots + option.slots,
+          pollution: state.pollution + option.pollution,
+          revenue: state.revenue + option.revenue,
+          cost: state.cost + option.cost,
+          foodProduced: state.foodProduced + option.foodProduced,
+          entries: option.entries.length > 0 ? [...state.entries, ...option.entries] : state.entries,
+        };
+        const key = `${combined.slots}|${combined.pollution}`;
+        const existing = next.get(key);
+        if (!existing || combined.revenue - combined.cost > existing.revenue - existing.cost) {
+          next.set(key, combined);
+        }
+      }
+    }
+    states = next;
+  }
+
+  const bySlots = new Map<number, ProductionState[]>();
+  for (const state of states.values()) {
+    const list = bySlots.get(state.slots) ?? [];
+    list.push(state);
+    bySlots.set(state.slots, list);
+  }
+  return bySlots;
+}
+
+function buildCommerceStates(
+  maxSlots: number,
+  baseCommerce: number,
+  maxCommerce: number,
+  projects: OptimizerProjects,
+  upkeepMultiplier: number,
+): CommerceState[] {
+  const mallMax = projects.telecommunicationsSatellite ? 5 : 4;
+  const bankMax = projects.internationalTradeCenter ? 6 : 5;
+  const best = new Map<string, CommerceState>();
+
+  for (let stadium = 0; stadium <= 3; stadium++) {
+    for (let mall = 0; mall <= mallMax; mall++) {
+      for (let bank = 0; bank <= bankMax; bank++) {
+        for (let supermarket = 0; supermarket <= 6; supermarket++) {
+          const slots = stadium + mall + bank + supermarket;
+          if (slots > maxSlots) continue;
+          const rawCommerce = baseCommerce + stadium * 12 + mall * 9 + bank * 5 + supermarket * 3;
+          const commerce = Math.min(maxCommerce, rawCommerce);
+          const cost = (stadium * 12_150 + mall * 5_400 + bank * 1_800 + supermarket * 600)
+            * upkeepMultiplier;
+          const state: CommerceState = {
+            slots,
+            commerce,
+            cost,
+            counts: { Stadium: stadium, "Shopping Mall": mall, Bank: bank, Supermarket: supermarket },
+          };
+          const key = `${slots}|${commerce}`;
+          const existing = best.get(key);
+          if (!existing || state.cost < existing.cost) best.set(key, state);
+        }
+      }
+    }
+  }
+  return [...best.values()];
+}
+
+export function computeOptimalBuild(
   infra: number,
   land: number,
   prices: Record<string, number>,
   maxCommerce: number,
-  hasMassIrrigation: boolean,
-  hasUraniumEnrichment: boolean,
+  projects: OptimizerProjects,
   radiationPenalty: number,
+  gameDate: string | null,
+  ageMultiplier: number,
+  domesticPolicy: string,
   milCounts: Record<string, number>,
   civilCounts: Record<string, number>,
 ): OptimizerResult {
   const powerType: PowerType = "nuclear";
+  const improvementUpkeepMultiplier = projects.greenTechnologies ? 0.9 : 1;
   const totalSlots = Math.floor(infra / 50);
   const powerSlots = computePowerSlots(infra, powerType);
-  const powerDailyCost = computePowerDailyCost(infra, powerType, prices);
+  const powerDailyCost = computePowerDailyCost(infra, powerType, prices, improvementUpkeepMultiplier);
   const milSlots = MIL_BUILDINGS.reduce((s, b) => s + (milCounts[b.key] ?? 0), 0);
-  const dailyMilCost = MIL_BUILDINGS.reduce((s, b) => s + (milCounts[b.key] ?? 0) * b.dailyCost, 0);
-  // All civil buildings are manual inputs
+  const dailyMilCost = MIL_BUILDINGS.reduce((s, b) => s + (milCounts[b.key] ?? 0) * b.dailyCost, 0)
+    * improvementUpkeepMultiplier;
   const civilSlots = CIVIL_BUILDINGS.reduce((s, b) => s + (civilCounts[b.key] ?? 0), 0);
-  const dailyCivilCost = CIVIL_BUILDINGS.reduce((s, b) => s + (civilCounts[b.key] ?? 0) * b.dailyCost, 0);
-  let remainingSlots = totalSlots - powerSlots - milSlots - civilSlots;
-
-  // Disease from manually set hospitals
+  const dailyCivilCost = CIVIL_BUILDINGS.reduce((s, b) => s + (civilCounts[b.key] ?? 0) * b.dailyCost, 0)
+    * improvementUpkeepMultiplier;
+  const availableSlots = Math.max(0, totalSlots - powerSlots - milSlots - civilSlots);
   const hospitals = civilCounts.hospitals ?? 0;
-  const baseDiseasePct = baseDisease(infra);
-  const finalDiseasePct = diseaseAfterHospitals(infra, hospitals);
-  const popMod = 1 - finalDiseasePct / 100;
-  const hospitalsNeeded = hospitalsToZeroDisease(infra);
-
-  // Pre-apply manually set subway (max 1, adds 8% commerce, slot already reserved above)
+  const policeStations = civilCounts.police_stations ?? 0;
   const subwayManual = Math.min(civilCounts.subway ?? 0, 1);
+  const projectCommerce = (projects.internationalTradeCenter ? 1 : 0)
+    + (projects.telecommunicationsSatellite ? 2 : 0)
+    + (projects.specializedPoliceTraining ? 4 : 0);
+  const baseCommerce = subwayManual * 8 + projectCommerce;
+  const seasonMultiplier = seasonalFoodMultiplier(gameDate);
+  const radiationMultiplier = radiationFoodMultiplier(radiationPenalty * 10, projects.falloutShelter);
+  const productionStates = buildProductionStates(
+    availableSlots,
+    land,
+    prices,
+    projects,
+    seasonMultiplier,
+    radiationMultiplier,
+  );
+  const commerceStates = buildCommerceStates(
+    availableSlots,
+    baseCommerce,
+    maxCommerce,
+    projects,
+    improvementUpkeepMultiplier,
+  );
+  const grossIncomeMultiplier = domesticPolicy === "OPEN_MARKETS"
+    ? openMarketsMultiplier(projects.governmentSupportAgency, projects.bureauOfDomesticAffairs)
+    : 1;
 
-  // Commerce improvements — greedy fill to cap, skip Subway if manually set
-  const commerceSorted = [...COMMERCE_IMPS]
-    .filter(ci => subwayManual === 0 || ci.name !== "Subway")
-    .sort((a, b) => {
-      const av = a.pct * (0.725 / 50) * (infra * 100 * popMod) * 12 - a.dailyCost;
-      const bv = b.pct * (0.725 / 50) * (infra * 100 * popMod) * 12 - b.dailyCost;
-      return bv - av;
-    });
+  const recyclingPollution = projects.recyclingInitiative ? -75 : -70;
+  const subwayPollution = projects.greenTechnologies ? -75 : -45;
+  const fixedPollution = hospitals * 4
+    + policeStations
+    + (civilCounts.recycling_centers ?? 0) * recyclingPollution
+    + subwayManual * subwayPollution;
+  const fixedCost = powerDailyCost + dailyMilCost + dailyCivilCost;
 
-  const build: BuildEntry[] = [];
-  let currentCommerce = subwayManual * 8; // subway already placed manually
-  let dailyCommerceCost = 0;
+  let best: {
+    commerce: CommerceState;
+    production: ProductionState;
+    totalPollution: number;
+    population: number;
+    disease: number;
+    crime: number;
+    dailyCommerce: number;
+    foodConsumed: number;
+    netProfit: number;
+  } | null = null;
 
-  for (const ci of commerceSorted) {
-    if (remainingSlots <= 0 || currentCommerce >= maxCommerce) break;
-    const spaceByCommerce = Math.floor((maxCommerce - currentCommerce) / ci.pct);
-    const canAdd = Math.min(ci.max, remainingSlots, spaceByCommerce);
-    if (canAdd <= 0) continue;
-    const revenue = Array.from({ length: canAdd }, (_, i) =>
-      marginalCommerceIncome(infra, currentCommerce + i * ci.pct, ci.pct, maxCommerce, popMod)
-    ).reduce((s, v) => s + v, 0);
-    const cost = canAdd * ci.dailyCost;
-    build.push({ category: "commerce", name: ci.name, count: canAdd, dailyRevenue: revenue, dailyCost: cost });
-    currentCommerce += canAdd * ci.pct;
-    dailyCommerceCost += cost;
-    remainingSlots -= canAdd;
+  for (const commerce of commerceStates) {
+    const productionSlotCount = availableSlots - commerce.slots;
+    const candidates = productionStates.get(productionSlotCount) ?? [];
+    for (const production of candidates) {
+      const totalPollution = fixedPollution + production.pollution;
+      const populationResult = cityPopulation({
+        infrastructure: infra,
+        land,
+        pollution: totalPollution,
+        hospitals,
+        policeStations,
+        commerce: commerce.commerce,
+        ageMultiplier,
+        clinicalResearchCenter: projects.clinicalResearchCenter,
+        specializedPoliceTraining: projects.specializedPoliceTraining,
+      });
+      const dailyCommerce = commerceIncome(
+        populationResult.population,
+        commerce.commerce,
+        grossIncomeMultiplier,
+      );
+      const foodConsumed = dailyCivilianFoodUsage(populationResult.population);
+      const netProfit = dailyCommerce
+        + production.revenue
+        - production.cost
+        - commerce.cost
+        - fixedCost
+        - foodConsumed * prices.food;
+      if (!best || netProfit > best.netProfit) {
+        best = {
+          commerce,
+          production,
+          totalPollution,
+          population: populationResult.population,
+          disease: populationResult.disease,
+          crime: populationResult.crime,
+          dailyCommerce,
+          foodConsumed,
+          netProfit,
+        };
+      }
+    }
   }
 
-  // Production options (for remaining slots & the comparison table)
-  // Multiply by 12 turns/day to get daily food production
-  // Apply radiation penalty: food * max(0, 1 - (global + continent radiation) / 1000)
-  const radiationMod = Math.max(0, 1 - radiationPenalty / 100);
-  const farmLandRate = (land / (hasMassIrrigation ? 400 : 500)) * 12 * radiationMod;
+  if (!best) {
+    const emptyCommerce: CommerceState = { slots: 0, commerce: baseCommerce, cost: 0, counts: {} };
+    const emptyProduction: ProductionState = { slots: 0, pollution: 0, revenue: 0, cost: 0, foodProduced: 0, entries: [] };
+    const populationResult = cityPopulation({
+      infrastructure: infra,
+      land,
+      pollution: fixedPollution,
+      hospitals,
+      policeStations,
+      commerce: baseCommerce,
+      ageMultiplier,
+      clinicalResearchCenter: projects.clinicalResearchCenter,
+      specializedPoliceTraining: projects.specializedPoliceTraining,
+    });
+    const dailyCommerce = commerceIncome(populationResult.population, baseCommerce, grossIncomeMultiplier);
+    const foodConsumed = dailyCivilianFoodUsage(populationResult.population);
+    best = {
+      commerce: emptyCommerce,
+      production: emptyProduction,
+      totalPollution: fixedPollution,
+      population: populationResult.population,
+      disease: populationResult.disease,
+      crime: populationResult.crime,
+      dailyCommerce,
+      foodConsumed,
+      netProfit: dailyCommerce - fixedCost - foodConsumed * prices.food,
+    };
+  }
+
+  const commerceEntries: BuildEntry[] = [];
+  let representedCommerce = baseCommerce;
+  for (const ci of COMMERCE_IMPS.filter((item) => item.name !== "Subway")) {
+    const count = best.commerce.counts[ci.name] ?? 0;
+    if (count === 0) continue;
+    const effectiveCommerce = Math.max(0, Math.min(maxCommerce, representedCommerce + ci.pct * count) - representedCommerce);
+    const revenue = (effectiveCommerce / 50) * 0.725 * best.population * grossIncomeMultiplier;
+    commerceEntries.push({
+      category: "commerce",
+      name: ci.name,
+      count,
+      dailyRevenue: revenue,
+      dailyCost: ci.dailyCost * count * improvementUpkeepMultiplier,
+    });
+    representedCommerce += ci.pct * count;
+  }
+  const build = [...commerceEntries, ...best.production.entries];
 
   const improvementOptions: ImprovementOption[] = [];
-
-  // Manufacturing (buy inputs from market)
-  for (const mi of MANUF_IMPS) {
-    const inputCost = Object.entries(mi.inputs).reduce((s, [r, q]) => s + q * (prices[r] ?? 0), 0);
-    const revenue = mi.output * (prices[mi.produces] ?? 0);
-    const cost = mi.dailyCost + inputCost;
+  for (const item of [...MANUF_IMPS, ...RESOURCE_IMPS]) {
+    const state = productionEntry(
+      item.name,
+      item.max,
+      land,
+      prices,
+      projects,
+      seasonMultiplier,
+      radiationMultiplier,
+    );
     improvementOptions.push({
-      name: mi.name, category: "Manufacturing",
-      revenuePerSlot: revenue, costPerSlot: cost, profitPerSlot: revenue - cost,
-      detail: `${mi.output} ${mi.produces}/day from ${Object.entries(mi.inputs).map(([r, q]) => `${q} ${r}`).join(" + ")}`,
+      name: item.name,
+      category: MANUF_IMPS.some((candidate) => candidate.name === item.name) ? "Manufacturing" : "Raw Resource",
+      revenuePerSlot: state.revenue / item.max,
+      costPerSlot: state.cost / item.max,
+      profitPerSlot: (state.revenue - state.cost) / item.max,
+      detail: `Average at ${item.max}/city with specialization`,
     });
   }
-
-  // Raw resources
-  for (const ri of RESOURCE_IMPS) {
-    const amount = (ri.name === "Uranium Mine" && hasUraniumEnrichment) ? ri.amount * 2 : ri.amount;
-    const revenue = amount * (prices[ri.produces] ?? 0);
-    improvementOptions.push({
-      name: ri.name, category: "Raw Resource",
-      revenuePerSlot: revenue, costPerSlot: ri.dailyCost, profitPerSlot: revenue - ri.dailyCost,
-      detail: `${amount} ${ri.produces}/day${ri.name === "Uranium Mine" && hasUraniumEnrichment ? " (Uranium Enrichment)" : ""}`,
-    });
-  }
-
-  // Farm — avg revenue per slot assuming max 20 farms (specialization bonus caps at 1.5×)
-  const farmMaxFood = farmTotalFood(20, farmLandRate);
-  const farmFoodPerFarmAtMax = farmMaxFood / 20;
-  const farmAvgRevPerSlot = farmFoodPerFarmAtMax * (prices.food ?? 0);
-  const farmDailyCost = 300;
+  const farmState = productionEntry(
+    "Farm",
+    20,
+    land,
+    prices,
+    projects,
+    seasonMultiplier,
+    radiationMultiplier,
+  );
   improvementOptions.push({
-    name: "Farm", category: "Raw Resource",
-    revenuePerSlot: farmAvgRevPerSlot, costPerSlot: farmDailyCost, profitPerSlot: farmAvgRevPerSlot - farmDailyCost,
-    detail: `${fmtNum(farmFoodPerFarmAtMax)} food/farm avg (${fmtNum(farmMaxFood)} total at 20) × ${fmtMoney(prices.food ?? 0)}/unit`,
+    name: "Farm",
+    category: "Raw Resource",
+    revenuePerSlot: farmState.revenue / 20,
+    costPerSlot: farmState.cost / 20,
+    profitPerSlot: (farmState.revenue - farmState.cost) / 20,
+    detail: `${fmtNum(farmState.foodProduced / 20)} food/farm avg (${fmtNum(farmState.foodProduced)} total at 20)`,
   });
-
-  // Hospitals — each reduces disease 2.5%, increasing effective population → commerce income
-  // Show marginal value for each hospital slot (diminishing once disease hits 0)
-  for (let h = 1; h <= 5; h++) {
-    const diseaseBefore = Math.max(0, baseDiseasePct - (h - 1) * 2.5);
-    const diseaseAfter  = Math.max(0, baseDiseasePct - h * 2.5);
-    if (diseaseBefore <= 0) break; // no disease left to reduce
-    const popBefore = 1 - diseaseBefore / 100;
-    const popAfter  = 1 - diseaseAfter  / 100;
-    const revenueGain = commerceIncome(infra, currentCommerce, popAfter)
-                      - commerceIncome(infra, currentCommerce, popBefore);
-    improvementOptions.push({
-      name: "Hospital",
-      category: "Civil",
-      revenuePerSlot: revenueGain,
-      costPerSlot: 1000,
-      profitPerSlot: revenueGain - 1000,
-      detail: `Disease ${diseaseBefore.toFixed(2)}% → ${diseaseAfter.toFixed(2)}% (+${fmtMoney(revenueGain)}/day commerce)`,
-    });
-  }
-
-  // Police stations and recycling centers — qualitative benefit (crime/pollution reduction)
-  improvementOptions.push({
-    name: "Police Station", category: "Civil",
-    revenuePerSlot: 0, costPerSlot: 750, profitPerSlot: -750,
-    detail: "Reduces crime rate → less population loss (formula not quantified)",
-  });
-  improvementOptions.push({
-    name: "Recycling Center", category: "Civil",
-    revenuePerSlot: 0, costPerSlot: 2500, profitPerSlot: -2500,
-    detail: "Reduces pollution → less disease/population loss (formula not quantified)",
-  });
-
   improvementOptions.sort((a, b) => b.profitPerSlot - a.profitPerSlot);
 
-  // Fill remaining slots with production improvements (civil buildings are all manual — skip them)
-  let dailyProduction = 0;
-  let dailyProductionCost = 0;
-  for (const opt of improvementOptions) {
-    if (remainingSlots <= 0) break;
-    if (opt.profitPerSlot <= 0) break;
-    if (opt.category === "Civil") continue; // all civil is manual
-    const max = getImpMax(opt.name);
-    const toAdd = Math.min(remainingSlots, max);
-    if (toAdd <= 0) continue;
-    const revenue = opt.name === "Farm"
-      ? farmTotalFood(toAdd, farmLandRate) * (prices.food ?? 0)
-      : opt.revenuePerSlot * toAdd;
-    const cost = opt.costPerSlot * toAdd;
-    const category: BuildEntry["category"] = opt.category === "Manufacturing" ? "manufacturing" : "resource";
-    build.push({ category, name: opt.name, count: toAdd, dailyRevenue: revenue, dailyCost: cost });
-    dailyProduction += revenue;
-    dailyProductionCost += cost;
-    remainingSlots -= toAdd;
-  }
-
-  // ── Pollution & crime (post-fill) ──────────────────────────────────────────
-  let totalPollution = 0;
-  totalPollution += powerSlots * POWER_POLLUTION[powerType];
-  for (const b of MIL_BUILDINGS)   totalPollution += (milCounts[b.key]   ?? 0) * (MIL_POLLUTION[b.key]   ?? 0);
-  for (const b of CIVIL_BUILDINGS) totalPollution += (civilCounts[b.key] ?? 0) * (CIVIL_POLLUTION[b.key] ?? 0);
-  for (const entry of build)       totalPollution += entry.count * (IMPROVEMENT_POLLUTION[entry.name] ?? 0);
-  const pollutionDisease = Math.max(0, totalPollution) / 100;
-  const correctedDiseasePct = Math.max(0, baseDiseasePct + pollutionDisease - hospitals * 2.5);
-  // Crime: max(0, 103 - police*2.5 - commerce%)
-  const crimePct = Math.max(0, 103 - (civilCounts.police_stations ?? 0) * 2.5 - currentCommerce);
-  // Effective pop modifier combines disease and crime
-  const effectivePopMod = (1 - correctedDiseasePct / 100) * (1 - crimePct / 100);
-
-  const dailyCommerce = commerceIncome(infra, currentCommerce, effectivePopMod);
-  const dailyCommerceNoDiseaseReduction = commerceIncome(infra, currentCommerce, 1 - baseDiseasePct / 100);
+  const baseDiseasePct = baseDisease(infra, land, 0);
+  const pollutionDisease = best.totalPollution * 0.05;
+  const correctedDiseasePct = Math.max(0, best.disease);
+  const crimePct = Math.max(0, best.crime);
+  const hospitalsNeeded = hospitalsToZeroDisease(
+    infra,
+    land,
+    best.totalPollution,
+    projects.clinicalResearchCenter,
+  );
+  const dailyFoodConsumptionCost = best.foodConsumed * prices.food;
 
   return {
-    totalSlots, powerSlots, milSlots, civilSlots,
-    availableSlots: totalSlots - powerSlots - milSlots - civilSlots,
-    commercePct: currentCommerce, dailyCommerce, dailyCommerceNoDiseaseReduction, dailyProduction,
-    dailyPowerCost: powerDailyCost, dailyCommerceCost, dailyProductionCost, dailyMilCost, dailyCivilCost,
-    baseDiseasePct, finalDiseasePct, popMod, hospitalsNeeded,
-    totalPollution, pollutionDisease, correctedDiseasePct, crimePct, effectivePopMod,
-    build, improvementOptions,
+    totalSlots,
+    powerSlots,
+    milSlots,
+    civilSlots,
+    availableSlots,
+    commercePct: best.commerce.commerce,
+    dailyCommerce: best.dailyCommerce,
+    dailyCommerceNoDiseaseReduction: best.dailyCommerce,
+    dailyProduction: best.production.revenue,
+    dailyFoodProduced: best.production.foodProduced,
+    dailyFoodConsumed: best.foodConsumed,
+    dailyFoodConsumptionCost,
+    dailyPowerCost: powerDailyCost,
+    dailyCommerceCost: best.commerce.cost,
+    dailyProductionCost: best.production.cost,
+    dailyMilCost,
+    dailyCivilCost,
+    baseDiseasePct,
+    finalDiseasePct: correctedDiseasePct,
+    popMod: best.population / (infra * 100),
+    hospitalsNeeded,
+    totalPollution: best.totalPollution,
+    pollutionDisease,
+    correctedDiseasePct,
+    crimePct,
+    effectivePopMod: best.population / (infra * 100),
+    population: best.population,
+    netProfit: best.netProfit,
+    unfilledSlots: Math.max(0, availableSlots - best.commerce.slots - best.production.slots),
+    build,
+    improvementOptions,
   };
 }
 
@@ -420,13 +702,13 @@ function PriceRow({ resource, prices, onChange }: { resource: string; prices: Re
 
 export default function OptimizerPage() {
   const [nationId, setNationId] = useState("");
-  const [nationName, setNationName] = useState("");
   const [infra, setInfra] = useState("");
   const [land, setLand] = useState("");
   const [maxCommerce, setMaxCommerce] = useState(100);
-  const [hasMassIrrigation, setHasMassIrrigation] = useState(false);
-  const [hasUraniumEnrichment, setHasUraniumEnrichment] = useState(false);
+  const [projects, setProjects] = useState<OptimizerProjects>(DEFAULT_PROJECTS);
   const [radiationPenalty, setRadiationPenalty] = useState(0);
+  const [ageMultiplier, setAgeMultiplier] = useState(1);
+  const [domesticPolicy, setDomesticPolicy] = useState("");
   const [prices, setPrices] = useState<Record<string, number>>(FALLBACK_PRICES);
   const [pricesOverridden, setPricesOverridden] = useState(false);
   const [pricesOpen, setPricesOpen] = useState(false);
@@ -451,19 +733,29 @@ export default function OptimizerPage() {
     refetchInterval: 10 * 60 * 1000,
   });
 
-  // Keep prices in sync with the latest API data unless the user has manually overridden them
-  useEffect(() => {
-    if (tradePrices && !pricesOverridden) {
-      setPrices(tradePriceToMap(tradePrices));
-    }
-  }, [tradePrices, pricesOverridden]);
+  const effectivePrices = useMemo(
+    () => pricesOverridden ? prices : tradePrices ? tradePriceToMap(tradePrices) : FALLBACK_PRICES,
+    [pricesOverridden, prices, tradePrices],
+  );
 
   const result = useMemo<OptimizerResult | null>(() => {
     const i = parseFloat(infra) || 0;
     const l = parseFloat(land) || 0;
     if (i < 100) return null;
-    return computeOptimalBuild(i, l, prices, maxCommerce, hasMassIrrigation, hasUraniumEnrichment, radiationPenalty, milCounts, civilCounts);
-  }, [infra, land, prices, maxCommerce, hasMassIrrigation, hasUraniumEnrichment, radiationPenalty, milCounts, civilCounts]);
+    return computeOptimalBuild(
+      i,
+      l,
+      effectivePrices,
+      maxCommerce,
+      projects,
+      radiationPenalty,
+      gameInfo?.game_date ?? null,
+      ageMultiplier,
+      domesticPolicy,
+      milCounts,
+      civilCounts,
+    );
+  }, [infra, land, effectivePrices, maxCommerce, projects, radiationPenalty, gameInfo?.game_date, ageMultiplier, domesticPolicy, milCounts, civilCounts]);
 
   function lookupNation() {
     const id = nationId.trim();
@@ -471,20 +763,23 @@ export default function OptimizerPage() {
     const member = members.find(m => String(m.id) === id);
     if (!member) {
       setLookupMsg("Nation not found in alliance DB. Enter infra and land manually.");
-      setNationName("");
       return;
     }
     const cities = member.cities ?? [];
     if (cities.length === 0) {
       setLookupMsg(`Found ${member.nation_name} — no city data yet. Enter infra and land manually.`);
-      setNationName(member.nation_name);
       return;
     }
     const avgInfra = Math.round(cities.reduce((s, c) => s + (c.infrastructure ?? 0), 0) / cities.length);
     const avgLand  = Math.round(cities.reduce((s, c) => s + (c.land ?? 0), 0) / cities.length);
     setInfra(avgInfra.toString());
     setLand(avgLand.toString());
-    setNationName(member.nation_name);
+    setDomesticPolicy(member.domestic_policy ?? "");
+
+    const cityDates = cities
+      .map((city) => city.date)
+      .filter((date): date is string => Boolean(date));
+    setAgeMultiplier(averageCityAgeMultiplier(cityDates));
 
     // Auto-fill buildings from first city (if building data is present)
     const firstCity = cities[0];
@@ -503,20 +798,28 @@ export default function OptimizerPage() {
       });
     }
 
-    // Auto-fill projects — PnW data first, BK Net as fallback
-    if (member.mass_irrigation !== undefined || member.international_trade_center !== undefined) {
-      setHasMassIrrigation(!!member.mass_irrigation);
-      setMaxCommerce(member.telecommunications_satellite ? 125 : member.international_trade_center ? 115 : 100);
-      setHasUraniumEnrichment(!!member.uranium_enrichment_program);
-    } else {
-      const bknet = bknetMembers.find(m => String(m.nation.id) === id);
-      if (bknet?.nation.projects) {
-        const proj = bknet.nation.projects;
-        setHasMassIrrigation(!!proj.mass_irrigation);
-        setMaxCommerce(proj.telecommunications_satellite ? 125 : proj.international_trade_center ? 115 : 100);
-        setHasUraniumEnrichment(!!proj.uranium_enrichment_program);
-      }
-    }
+    // BK Net exposes the full project set; P&W fields cover the core fallback set.
+    const bknet = bknetMembers.find(m => String(m.nation.id) === id);
+    const proj = bknet?.nation.projects ?? {};
+    const loadedProjects: OptimizerProjects = {
+      massIrrigation: !!(member.mass_irrigation ?? proj.mass_irrigation),
+      uraniumEnrichment: !!(member.uranium_enrichment_program ?? proj.uranium_enrichment_program),
+      ironWorks: !!proj.iron_works,
+      bauxiteWorks: !!proj.bauxite_works,
+      armsStockpile: !!proj.arms_stockpile,
+      emergencyGasolineReserve: !!proj.emergency_gasoline_reserve,
+      greenTechnologies: !!proj.green_technologies,
+      clinicalResearchCenter: !!proj.clinical_research_center,
+      specializedPoliceTraining: !!proj.specialized_police_training_program,
+      recyclingInitiative: !!proj.recycling_initiative,
+      falloutShelter: !!proj.fallout_shelter,
+      internationalTradeCenter: !!(member.international_trade_center ?? proj.international_trade_center),
+      telecommunicationsSatellite: !!(member.telecommunications_satellite ?? proj.telecommunications_satellite),
+      governmentSupportAgency: !!proj.government_support_agency,
+      bureauOfDomesticAffairs: !!proj.bureau_of_domestic_affairs,
+    };
+    setProjects(loadedProjects);
+    setMaxCommerce(loadedProjects.telecommunicationsSatellite ? 125 : loadedProjects.internationalTradeCenter ? 115 : 100);
 
     // Auto-set radiation penalty from game radiation data + nation's continent
     if (gameInfo?.radiation && member.continent) {
@@ -535,8 +838,6 @@ export default function OptimizerPage() {
   }
 
   const infraNum = parseFloat(infra) || 0;
-  const landNum  = parseFloat(land) || 0;
-  const ready = infraNum >= 100;
   const categoryColors: Record<string, string> = {
     power: "text-yellow-400",
     commerce: "text-blue-400",
@@ -601,21 +902,49 @@ export default function OptimizerPage() {
               <label className="text-xs text-slate-400">Avg Land / City</label>
               <input type="number" min={0} placeholder="e.g. 5000" value={land} onChange={e => setLand(e.target.value)} className={inputCls} style={{ width: 140 }} />
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">City Age Bonus %</label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={Math.round((ageMultiplier - 1) * 1000) / 10}
+                onChange={e => setAgeMultiplier(1 + Math.max(0, Number(e.target.value)) / 100)}
+                className={inputCls}
+                style={{ width: 140 }}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Domestic Policy</label>
+              <select
+                value={domesticPolicy}
+                onChange={e => setDomesticPolicy(e.target.value)}
+                className={inputCls}
+                style={{ width: 160 }}
+              >
+                <option value="">Other</option>
+                <option value="OPEN_MARKETS">Open Markets</option>
+              </select>
+            </div>
           </div>
 
           {/* Projects */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Relevant Projects</label>
-            <div className="flex gap-4 flex-wrap">
-              {[
-                { key: "massIrrigation", label: "Mass Irrigation", state: hasMassIrrigation, set: setHasMassIrrigation },
-                { key: "uraniumEnrichment", label: "Uranium Enrichment Program", state: hasUraniumEnrichment, set: setHasUraniumEnrichment },
-              ].map(({ key, label, state, set }) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-                  <input type="checkbox" checked={state} onChange={e => set(e.target.checked)} className="accent-blue-500" />
+            <label className="text-xs text-slate-400">Profitability Projects</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
+              {PROJECT_OPTIONS.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={projects[key]}
+                    onChange={e => setProjects(current => ({ ...current, [key]: e.target.checked }))}
+                    className="accent-blue-500"
+                  />
                   {label}
                 </label>
               ))}
+            </div>
+            <div className="flex gap-4 flex-wrap mt-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400">Max Commerce %</label>
                 <select
@@ -646,6 +975,11 @@ export default function OptimizerPage() {
                   className={inputCls}
                 />
               </div>
+              {gameInfo?.game_date && (
+                <span className="text-xs text-slate-500 self-center">
+                  Game date {new Date(gameInfo.game_date).toLocaleDateString()} · food {seasonalFoodMultiplier(gameInfo.game_date) === 0.8 ? "winter −20%" : seasonalFoodMultiplier(gameInfo.game_date) === 1.2 ? "summer +20%" : "normal season"}
+                </span>
+              )}
             </div>
           </div>
 
@@ -684,27 +1018,32 @@ export default function OptimizerPage() {
               <span className="text-slate-600"> — Subway adds 8% commerce &amp; reduces pollution. Hospitals eliminate disease for full population.</span>
             </label>
             <div className="flex flex-wrap gap-3">
-              {CIVIL_BUILDINGS.map(b => (
+              {CIVIL_BUILDINGS.map(b => {
+                const max = b.key === "hospitals" && projects.clinicalResearchCenter ? 6
+                  : b.key === "recycling_centers" && projects.recyclingInitiative ? 4
+                  : b.max;
+                return (
                 <div key={b.key} className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500">{b.name} <span className="text-slate-600">(max {b.max})</span></span>
+                  <span className="text-xs text-slate-500">{b.name} <span className="text-slate-600">(max {max})</span></span>
                   <div className="flex items-center gap-1">
                     <button
                       className="w-7 h-7 rounded bg-[#1e2540] text-slate-300 hover:bg-[#2a3150] font-bold text-sm flex items-center justify-center"
                       onClick={() => setCivilCounts(p => ({ ...p, [b.key]: Math.max(0, (p[b.key] ?? 0) - 1) }))}
                     >−</button>
                     <input
-                      type="number" min={0} max={b.max}
+                      type="number" min={0} max={max}
                       value={civilCounts[b.key] ?? 0}
-                      onChange={e => setCivilCounts(p => ({ ...p, [b.key]: Math.min(b.max, Math.max(0, Number(e.target.value))) }))}
+                      onChange={e => setCivilCounts(p => ({ ...p, [b.key]: Math.min(max, Math.max(0, Number(e.target.value))) }))}
                       className="w-12 text-center bg-[#0f1117] border border-[#2a3150] rounded text-white text-sm font-bold py-0.5 focus:outline-none focus:border-blue-500"
                     />
                     <button
                       className="w-7 h-7 rounded bg-[#1e2540] text-slate-300 hover:bg-[#2a3150] font-bold text-sm flex items-center justify-center"
-                      onClick={() => setCivilCounts(p => ({ ...p, [b.key]: Math.min(b.max, (p[b.key] ?? 0) + 1) }))}
+                      onClick={() => setCivilCounts(p => ({ ...p, [b.key]: Math.min(max, (p[b.key] ?? 0) + 1) }))}
                     >+</button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -727,13 +1066,13 @@ export default function OptimizerPage() {
           {pricesOpen && (
             <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 border-t border-[#2a3150] pt-3">
               {Object.keys(FALLBACK_PRICES).map(r => (
-                <PriceRow key={r} resource={r} prices={prices}
-                  onChange={(res, v) => { setPricesOverridden(true); setPrices(p => ({ ...p, [res]: v })); }}
+                <PriceRow key={r} resource={r} prices={effectivePrices}
+                  onChange={(res, v) => { setPrices({ ...effectivePrices, [res]: v }); setPricesOverridden(true); }}
                 />
               ))}
               {pricesOverridden && (
                 <button
-                  onClick={() => { setPricesOverridden(false); if (tradePrices) setPrices(tradePriceToMap(tradePrices)); else setPrices(FALLBACK_PRICES); }}
+                  onClick={() => setPricesOverridden(false)}
                   className="text-xs text-blue-400 hover:text-blue-300 transition-colors col-span-full text-left mt-1"
                 >
                   ↺ Reset to live prices
@@ -759,7 +1098,7 @@ export default function OptimizerPage() {
                 { label: "Power Slots", value: result.powerSlots, sub: "Nuclear plants", color: "text-yellow-400" },
                 { label: "Military Slots", value: result.milSlots, sub: result.milSlots > 0 ? `${fmtMoney(result.dailyMilCost)}/day` : "none set", color: "text-red-400" },
                 { label: "Civil Slots", value: result.civilSlots, sub: result.civilSlots > 0 ? `${fmtMoney(result.dailyCivilCost)}/day` : "none set", color: "text-teal-400" },
-                { label: "Avail. Slots", value: result.availableSlots, sub: "for improvements", color: "text-blue-400" },
+                { label: "Economic Slots", value: result.availableSlots, sub: result.unfilledSlots ? `${result.unfilledSlots} unfilled` : "all allocated", color: "text-blue-400" },
                 { label: "Max Commerce", value: `${maxCommerce}%`, sub: result.commercePct >= maxCommerce ? "cap reached" : `${result.commercePct}% reached`, color: "text-green-400" },
               ].map(({ label, value, sub, color }) => (
                 <div key={label} className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
@@ -775,7 +1114,7 @@ export default function OptimizerPage() {
               <div>
                 <p className="text-slate-300 font-semibold mb-1">Disease Rate</p>
                 <p className="text-xs text-slate-400">
-                  Base (infra): <span className={result.baseDiseasePct > 0 ? "text-red-400" : "text-green-400"}>{result.baseDiseasePct.toFixed(2)}%</span>
+                  Base (density + infra): <span className={result.baseDiseasePct > 0 ? "text-red-400" : "text-green-400"}>{result.baseDiseasePct.toFixed(2)}%</span>
                 </p>
                 {result.pollutionDisease > 0 && (
                   <p className="text-xs text-slate-400 mt-0.5">
@@ -789,7 +1128,7 @@ export default function OptimizerPage() {
                 )}
                 {(civilCounts.hospitals ?? 0) > 0 && (
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Hospitals (×{civilCounts.hospitals}): <span className="text-green-400">−{((civilCounts.hospitals ?? 0) * 2.5).toFixed(1)}%</span>
+                    Hospitals (×{civilCounts.hospitals}): <span className="text-green-400">−{((civilCounts.hospitals ?? 0) * (projects.clinicalResearchCenter ? 3.5 : 2.5)).toFixed(1)}%</span>
                   </p>
                 )}
                 <p className="text-xs font-medium mt-1">
@@ -802,17 +1141,17 @@ export default function OptimizerPage() {
               <div>
                 <p className="text-slate-300 font-semibold mb-1">Crime Rate</p>
                 <p className="text-xs text-slate-400">
-                  Commerce ({result.commercePct}%): <span className="text-green-400">−{result.commercePct.toFixed(0)}%</span>
+                  Commerce: <span className="text-green-400">{result.commercePct.toFixed(0)}%</span>
                 </p>
                 {(civilCounts.police_stations ?? 0) > 0 && (
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Police (×{civilCounts.police_stations}): <span className="text-green-400">−{((civilCounts.police_stations ?? 0) * 2.5).toFixed(1)}%</span>
+                    Police (×{civilCounts.police_stations}): <span className="text-green-400">−{((civilCounts.police_stations ?? 0) * (projects.specializedPoliceTraining ? 3.5 : 2.5)).toFixed(1)}%</span>
                   </p>
                 )}
                 <p className="text-xs font-medium mt-1">
                   Final crime: <span className={result.crimePct > 10 ? "text-yellow-400" : result.crimePct > 0 ? "text-orange-400" : "text-green-400"}>{result.crimePct.toFixed(2)}%</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-0.5 italic">max(0, 103 − police×2.5 − commerce)</p>
+                <p className="text-xs text-slate-500 mt-0.5 italic">((103 − commerce)² + population) / 111111 − police</p>
               </div>
               <div>
                 <p className="text-slate-300 font-semibold mb-1">Effective Population</p>
@@ -824,8 +1163,9 @@ export default function OptimizerPage() {
                   <p className="text-xs text-slate-400 mt-0.5">Crime −{result.crimePct.toFixed(2)}%: <span className="text-red-400">−{Math.round(infraNum * 100 * (1 - result.correctedDiseasePct / 100) * result.crimePct / 100).toLocaleString()}</span></p>
                 )}
                 <p className="text-xs font-medium mt-1">
-                  Effective: <span className="text-slate-300">{Math.round(infraNum * 100 * result.effectivePopMod).toLocaleString()}</span>
+                  Effective: <span className="text-slate-300">{Math.round(result.population).toLocaleString()}</span>
                 </p>
+                <p className="text-xs text-slate-500 mt-0.5">Age bonus: +{((ageMultiplier - 1) * 100).toFixed(1)}%</p>
                 <p className="text-xs text-slate-400 mt-1">Commerce: <span className="text-blue-300 font-medium">{fmtMoney(result.dailyCommerce)}/day</span></p>
               </div>
             </div>
@@ -837,7 +1177,7 @@ export default function OptimizerPage() {
                 <span className="text-slate-300 font-semibold">Power Plant Cost</span>
               </div>
               <p className="text-slate-400 text-xs">
-                {result.powerSlots} × Nuclear Power Plant — {fmtMoney(POWER_TYPES.nuclear.dailyCost)}/day operating + {POWER_TYPES.nuclear.fuelPerDay} uranium/day × {result.powerSlots} plants
+                {result.powerSlots} × Nuclear Power Plant — {fmtMoney(POWER_TYPES.nuclear.dailyCost)}/day operating each + {fmtNum(dailyNuclearUraniumUsage(infraNum))} uranium/day for {fmtNum(infraNum, 0)} infrastructure
               </p>
               <p className="text-yellow-400 font-medium mt-1">{fmtMoney(result.dailyPowerCost)}/day total</p>
             </div>
@@ -930,14 +1270,16 @@ export default function OptimizerPage() {
                     <div className="space-y-1 text-xs text-slate-400">
                       <p>Commerce income: <span className="text-blue-300">{fmtMoney(result.dailyCommerce)}/day</span></p>
                       <p>Production revenue: <span className="text-green-300">{fmtMoney(result.dailyProduction)}/day</span></p>
-                      <p>Total costs: <span className="text-red-300">{fmtMoney(result.dailyPowerCost + result.dailyCommerceCost + result.dailyProductionCost + result.dailyMilCost + result.dailyCivilCost)}/day</span></p>
+                      {result.dailyFoodProduced > 0 && <p className="text-slate-500">Food: {fmtNum(result.dailyFoodProduced)} produced − {fmtNum(result.dailyFoodConsumed)} consumed</p>}
+                      <p>Total costs: <span className="text-red-300">{fmtMoney(result.dailyPowerCost + result.dailyCommerceCost + result.dailyProductionCost + result.dailyMilCost + result.dailyCivilCost + result.dailyFoodConsumptionCost)}/day</span></p>
                       {result.dailyMilCost > 0 && <p className="text-slate-500">incl. {fmtMoney(result.dailyMilCost)}/day military upkeep</p>}
                       {result.dailyCivilCost > 0 && <p className="text-slate-500">incl. {fmtMoney(result.dailyCivilCost)}/day civil upkeep</p>}
+                      <p className="text-slate-500">Excludes unit upkeep and color bloc bonus.</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-400">Estimated Net Profit / City</p>
-                      <p className={`text-2xl font-bold ${(result.dailyCommerce + result.dailyProduction - result.dailyPowerCost - result.dailyCommerceCost - result.dailyProductionCost - result.dailyMilCost - result.dailyCivilCost) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {fmtMoney(result.dailyCommerce + result.dailyProduction - result.dailyPowerCost - result.dailyCommerceCost - result.dailyProductionCost - result.dailyMilCost - result.dailyCivilCost)}/day
+                      <p className={`text-2xl font-bold ${result.netProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {fmtMoney(result.netProfit)}/day
                       </p>
                     </div>
                   </div>
@@ -966,7 +1308,10 @@ export default function OptimizerPage() {
                   <tbody>
                     {/* Commerce improvements */}
                     {COMMERCE_IMPS.map(ci => {
-                      const revenue = ci.pct * (0.725 / 50) * (infraNum * 100) * 12;
+                      const policyMultiplier = domesticPolicy === "OPEN_MARKETS"
+                        ? openMarketsMultiplier(projects.governmentSupportAgency, projects.bureauOfDomesticAffairs)
+                        : 1;
+                      const revenue = ci.pct * (0.725 / 50) * result.population * policyMultiplier;
                       const profit = revenue - ci.dailyCost;
                       return (
                         <tr key={ci.name} className="border-b border-[#1e2540] hover:bg-[#1a2035]">
@@ -1006,7 +1351,7 @@ export default function OptimizerPage() {
             </div>
 
             <p className="text-xs text-slate-600">
-              Commerce income formula: <code>((commerce/50)×0.725 + 0.725) × (infra×100) × 12</code>. Resource prices are the 24h average from the P&amp;W API, updated each sync. Improvement formulas sourced from the P&amp;W wiki — may not reflect recent balance changes.
+              Commerce income formula: <code>((commerce/50)×0.725 + 0.725) × effective population</code> per day. The search values resource output at current market prices and accounts for specialization, project modifiers, pollution, city age, food consumption, season, and radiation.
             </p>
           </>
         )}

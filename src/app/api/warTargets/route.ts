@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync } from "fs";
-import { join } from "path";
-import db from "@/lib/db";
+import { getNationRecord, readJsonSingleton } from "@/lib/supabase";
+import { readAppConfig } from "@/lib/app-config";
 import {
   attackLootValue,
   avgInfraPerCity,
@@ -135,12 +134,11 @@ export async function GET(request: NextRequest) {
   // 2. Read and validate config
   let rawIds: unknown;
   try {
-    const configPath = join(process.cwd(), "data", "war-config.json");
-    const config = JSON.parse(readFileSync(configPath, "utf-8")) as { enemy_alliance_ids: unknown };
+    const config = await readAppConfig<{ enemy_alliance_ids: unknown }>("war-config");
     rawIds = config.enemy_alliance_ids;
   } catch {
     return NextResponse.json(
-      { error: "data/war-config.json not found or invalid JSON — ask an admin to check it" },
+      { error: "War configuration is missing or invalid — ask an admin to check it" },
       { status: 500 }
     );
   }
@@ -208,8 +206,7 @@ export async function GET(request: NextRequest) {
 
   let prices: TradePrices | null = null;
   try {
-    const row = db.prepare("SELECT data FROM trade_prices WHERE id = 1").get() as { data: string } | undefined;
-    if (row) prices = JSON.parse(row.data) as TradePrices;
+    prices = await readJsonSingleton("trade_prices") as TradePrices | null;
   } catch { /* no prices available */ }
 
   // Fetch beige loot: paginate through all completed wars involving target nations,
@@ -265,12 +262,7 @@ export async function GET(request: NextRequest) {
     })
     .sort((a, b) => b.avg_infra - a.avg_infra);
 
-  const allianceRow = db.prepare(`
-    SELECT id FROM nations WHERE id = ?
-    UNION
-    SELECT id FROM applicants WHERE id = ?
-    LIMIT 1
-  `).get(nationId, nationId) as { id: number } | undefined;
+  const allianceRow = await getNationRecord(nationId);
 
   const response: WarTargetsResponse = {
     targets, yourScore, minScore, maxScore, yourLeader, yourDiscord,

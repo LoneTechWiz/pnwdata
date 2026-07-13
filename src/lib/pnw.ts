@@ -7,6 +7,7 @@ export interface Nation {
   discord: string;
   score: number;
   num_cities: number;
+  population?: number;
   color: string;
   last_active: string;
   soldiers: number;
@@ -41,6 +42,8 @@ export interface Nation {
   telecommunications_satellite?: boolean;
   uranium_enrichment_program?: boolean;
   cities?: {
+    date?: string;
+    powered?: boolean;
     infrastructure: number;
     land: number;
     barracks: number;
@@ -213,6 +216,7 @@ export interface TradePrice {
 }
 
 export interface GameInfo {
+  game_date?: string;
   radiation: {
     global: number;
     north_america: number;

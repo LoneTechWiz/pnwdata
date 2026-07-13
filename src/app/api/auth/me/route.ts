@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { readRoleConfig, hasAccess } from "@/lib/role-config";
-import db from "@/lib/db";
+import { findNationByDiscord } from "@/lib/supabase";
 
 const SEND_WAR_TARGETS_ROLES = ["archduke", "viceroy", "defense peeps"];
 
@@ -30,15 +30,13 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const config = readRoleConfig();
+  const config = await readRoleConfig();
   const canManageRoles = session.isEmperor || hasAccess(config, "/role-config", session.roleIds);
   const accessiblePages = session.isEmperor
     ? Object.keys(config.pages)
     : Object.keys(config.pages).filter((p) => hasAccess(config, p, session.roleIds));
   // Look up the user's nation by matching their Discord username
-  const row = db.prepare(
-    `SELECT id FROM nations WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?) LIMIT 1`
-  ).get(session.username) as { id: number } | undefined;
+  const row = await findNationByDiscord(session.username);
 
   const guildRoles = await getGuildRoles();
   const userRoleNames = guildRoles

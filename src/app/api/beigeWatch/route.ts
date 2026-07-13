@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync } from "fs";
-import { join } from "path";
-import db from "@/lib/db";
+import { readJsonSingleton } from "@/lib/supabase";
+import { readAppConfig } from "@/lib/app-config";
 
 export const dynamic = "force-dynamic";
 
@@ -118,12 +117,11 @@ export async function GET(request: NextRequest) {
   // Read war config
   let rawIds: unknown;
   try {
-    const configPath = join(process.cwd(), "data", "war-config.json");
-    const config = JSON.parse(readFileSync(configPath, "utf-8")) as { enemy_alliance_ids: unknown };
+    const config = await readAppConfig<{ enemy_alliance_ids: unknown }>("war-config");
     rawIds = config.enemy_alliance_ids;
   } catch {
     return NextResponse.json(
-      { error: "data/war-config.json not found or invalid JSON — ask an admin to check it" },
+      { error: "War configuration is missing or invalid — ask an admin to check it" },
       { status: 500 }
     );
   }
@@ -188,15 +186,14 @@ export async function GET(request: NextRequest) {
     maxScore = Math.ceil(yourScore * 4 / 3);
   }
 
-  // Trade prices from SQLite for resource valuation
+  // Trade prices from Supabase for resource valuation
   type Prices = {
     coal: number; oil: number; uranium: number; iron: number; bauxite: number;
     lead: number; gasoline: number; munitions: number; steel: number; aluminum: number; food: number;
   };
   let prices: Prices | null = null;
   try {
-    const row = db.prepare("SELECT data FROM trade_prices WHERE id = 1").get() as { data: string } | undefined;
-    if (row) prices = JSON.parse(row.data) as Prices;
+    prices = await readJsonSingleton("trade_prices") as Prices | null;
   } catch { /* no prices available */ }
 
   type LootAttack = {

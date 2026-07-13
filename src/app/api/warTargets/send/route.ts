@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db from "@/lib/db";
+import { getNationRecord } from "@/lib/supabase";
 import { getSession } from "@/lib/session";
 import type { WarTarget } from "@/app/api/warTargets/route";
 
@@ -40,14 +40,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing nation_id or target" }, { status: 400 });
   }
 
-  const row = db.prepare(`
-    SELECT json_extract(data, '$.discord') as discord FROM nations WHERE id = ?
-    UNION
-    SELECT json_extract(data, '$.discord') as discord FROM applicants WHERE id = ?
-    LIMIT 1
-  `).get(nation_id, nation_id) as { discord: string | null } | undefined;
-
-  const discordUsername = row?.discord;
+  const row = await getNationRecord(nation_id);
+  const discordUsername = row?.data.discord;
   if (!discordUsername) {
     return NextResponse.json({ error: "No Discord username linked to this nation" }, { status: 404 });
   }

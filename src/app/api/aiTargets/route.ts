@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync } from "fs";
-import { join } from "path";
-import db from "@/lib/db";
+import { readAppConfig } from "@/lib/app-config";
+import { findNationByDiscord, getNationRecord, readJsonSingleton } from "@/lib/supabase";
 import { getSession } from "@/lib/session";
 import type { AiPick, AiTargetsResponse } from "@/lib/aiTargets";
 
@@ -123,12 +122,7 @@ export async function GET(request: NextRequest) {
     }
     nationId = parsed;
   } else {
-    const nationRow = db.prepare(`
-      SELECT id FROM nations WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?)
-      UNION
-      SELECT id FROM applicants WHERE LOWER(json_extract(data, '$.discord')) = LOWER(?)
-      LIMIT 1
-    `).get(session.username, session.username) as { id: number } | undefined;
+    const nationRow = await findNationByDiscord(session.username);
 
     if (!nationRow) {
       return NextResponse.json(
@@ -141,22 +135,17 @@ export async function GET(request: NextRequest) {
 
   let enemyAllianceIds: number[];
   try {
-    const config = JSON.parse(readFileSync(join(process.cwd(), "data", "war-config.json"), "utf-8"));
+    const config = await readAppConfig<{ enemy_alliance_ids: unknown }>("war-config");
     if (!Array.isArray(config.enemy_alliance_ids) || config.enemy_alliance_ids.length === 0) {
       return NextResponse.json({ error: "No enemy alliances configured" }, { status: 500 });
     }
     enemyAllianceIds = config.enemy_alliance_ids.map(Number);
   } catch {
-    return NextResponse.json({ error: "war-config.json not found or invalid" }, { status: 500 });
+    return NextResponse.json({ error: "War configuration is missing or invalid" }, { status: 500 });
   }
 
-  const discordRow = db.prepare(`
-    SELECT json_extract(data, '$.discord') as discord FROM nations WHERE id = ?
-    UNION
-    SELECT json_extract(data, '$.discord') as discord FROM applicants WHERE id = ?
-    LIMIT 1
-  `).get(nationId, nationId) as { discord: string | null } | undefined;
-  const nationDiscord = discordRow?.discord ?? null;
+  const discordRow = await getNationRecord(nationId);
+  const nationDiscord = discordRow?.data.discord ?? null;
 
   let yourScore: number;
   let yourNationName: string;
@@ -212,8 +201,7 @@ export async function GET(request: NextRequest) {
 
   let prices: Prices | null = null;
   try {
-    const row = db.prepare("SELECT data FROM trade_prices WHERE id = 1").get() as { data: string } | undefined;
-    if (row) prices = JSON.parse(row.data) as Prices;
+    prices = await readJsonSingleton("trade_prices") as Prices | null;
   } catch { /* use null */ }
 
   function attackLootValue(attacks: LootAttack[]): number {

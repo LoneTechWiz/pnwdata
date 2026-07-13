@@ -10,7 +10,6 @@ const PUBLIC_EXACT = new Set([
   "/",
   "/war-targets",
   "/conflict",
-  "/optimizer",
   "/login",
   "/403",
 ]);
@@ -35,8 +34,8 @@ export async function proxy(req: NextRequest) {
   // Emperor bypasses all role checks
   if (session.isEmperor) return NextResponse.next();
 
-  // Check role-config.json for all protected routes
-  const config = readRoleConfig();
+  // Check the Supabase-backed role configuration for protected routes.
+  const config = await readRoleConfig();
   if (hasAccess(config, pathname, session.roleIds)) {
     return NextResponse.next();
   }

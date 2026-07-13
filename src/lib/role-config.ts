@@ -1,24 +1,16 @@
 // src/lib/role-config.ts
-import fs from "fs";
-import path from "path";
-
 export interface RoleConfig {
   pages: Record<string, string[]>; // path → role ID array
 }
 
-const CONFIG_PATH = path.join(process.cwd(), "data", "role-config.json");
-
-export function readRoleConfig(): RoleConfig {
-  try {
-    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
-    return JSON.parse(raw) as RoleConfig;
-  } catch {
-    return { pages: {} };
-  }
+export async function readRoleConfig(): Promise<RoleConfig> {
+  const { readAppConfig } = await import("./app-config");
+  return readAppConfig<RoleConfig>("role-config");
 }
 
-export function writeRoleConfig(config: RoleConfig): void {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
+export async function writeRoleConfig(config: RoleConfig): Promise<void> {
+  const { writeAppConfig } = await import("./app-config");
+  await writeAppConfig("role-config", config);
 }
 
 export function hasAccess(config: RoleConfig, pathname: string, roleIds: string[]): boolean {

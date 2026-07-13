@@ -1,20 +1,30 @@
 import type { Nation, War, BankRec, Alliance } from "./pnw";
 import { resolveNationDiscord } from "./discord-username";
 import { exceedsStockpileThreshold } from "./stockpile";
-import { readFileSync, existsSync } from "fs";
-import path from "path";
+import { selectAll, supabase } from "./supabase";
+import { readAppConfig } from "./app-config";
 
-const STOCKPILE_ALERT_CONFIG_PATH = path.join(process.cwd(), "data", "stockpile-alert-config.json");
+function fail(error: { message: string } | null, context: string) {
+  if (error) throw new Error(`${context}: ${error.message}`);
+}
+
+async function replaceSnapshot(table: string, rows: Array<Record<string, unknown>>) {
+  const { error: deleteError } = await supabase.from(table).delete().not("id", "is", null);
+  fail(deleteError, `${table} delete`);
+  for (let offset = 0; offset < rows.length; offset += 500) {
+    const { error } = await supabase.from(table).insert(rows.slice(offset, offset + 500));
+    fail(error, `${table} insert`);
+  }
+}
 
 interface StockpileAlertConfig {
   enabled: boolean;
   thresholds: Record<string, number | null>;
 }
 
-function readStockpileAlertConfig(): StockpileAlertConfig | null {
-  if (!existsSync(STOCKPILE_ALERT_CONFIG_PATH)) return null;
+async function readStockpileAlertConfig(): Promise<StockpileAlertConfig | null> {
   try {
-    return JSON.parse(readFileSync(STOCKPILE_ALERT_CONFIG_PATH, "utf-8"));
+    return await readAppConfig<StockpileAlertConfig>("stockpile-alert-config");
   } catch {
     return null;
   }
@@ -47,12 +57,12 @@ const ALLIANCE_QUERY = `
 
 const MEMBERS_QUERY = `
   query($alliance_id:[Int]) { nations(alliance_id:$alliance_id, first:500) { data {
-    id nation_name leader_name discord score num_cities color last_active continent
+    id nation_name leader_name discord score num_cities population color last_active continent
     money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food credits
     soldiers tanks aircraft ships missiles nukes
     vacation_mode_turns beige_turns alliance_position
     war_policy domestic_policy offensive_wars_count defensive_wars_count
-    cities { infrastructure land barracks factory hangar drydock hospital policestation recycling_center subway }
+    cities { date powered infrastructure land barracks factory hangar drydock hospital policestation recycling_center subway }
     mass_irrigation international_trade_center telecommunications_satellite uranium_enrichment_program
   } } }
 `;
@@ -86,7 +96,7 @@ const TRADE_PRICES_QUERY = `
 `;
 
 const GAME_INFO_QUERY = `
-  { game_info { radiation { global north_america south_america europe africa asia australia } } }
+  { game_info { game_date radiation { global north_america south_america europe africa asia australia } } }
 `;
 
 const ALL_MEMBERSHIPS_QUERY = `
@@ -116,10 +126,8 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
 }
 
 export async function sync(): Promise<void> {
-  const { default: db } = await import("./db");
-
   console.log("[PnW Sync] Starting sync…");
-  db.prepare(`UPDATE sync_status SET status = 'syncing' WHERE id = 1`).run();
+  fail((await supabase.from("sync_status").update({ status: "syncing" }).eq("id", 1)).error, "sync status");
 
   try {
     const meData = await gql<{ me: { nation: { alliance_id: string } } }>(MY_NATION_QUERY);
@@ -150,72 +158,37 @@ export async function sync(): Promise<void> {
     if (alliance) {
       // member_count is not a direct field; derive it from the fetched nations
       const allianceWithCount = { ...alliance, member_count: nations.length };
-      db.prepare(`INSERT OR REPLACE INTO alliance_meta (id, data, updated_at) VALUES (1, ?, ?)`)
-        .run(JSON.stringify(allianceWithCount), now);
+      fail((await supabase.from("alliance_meta").upsert({ id: 1, data: allianceWithCount, updated_at: now })).error, "alliance meta");
     }
 
     const latestPrice = tradePricesData.tradeprices.data[0];
     if (latestPrice) {
-      db.prepare(`INSERT OR REPLACE INTO trade_prices (id, data, updated_at) VALUES (1, ?, ?)`)
-        .run(JSON.stringify(latestPrice), now);
+      fail((await supabase.from("trade_prices").upsert({ id: 1, data: latestPrice, updated_at: now })).error, "trade prices");
     }
 
-    db.prepare(`INSERT OR REPLACE INTO game_info (id, data, updated_at) VALUES (1, ?, ?)`)
-      .run(JSON.stringify(gameInfoData.game_info), now);
-
-    const upsertNation = db.prepare(`INSERT OR REPLACE INTO nations (id, data, updated_at) VALUES (?, ?, ?)`);
-    db.transaction((items: Nation[]) => {
-      for (const n of items) upsertNation.run(n.id, JSON.stringify(n), now);
-    })(nations);
-    if (nations.length > 0) {
-      db.prepare(`DELETE FROM nations WHERE id NOT IN (${nations.map(n => n.id).join(",")})`).run();
-    }
-
-    const upsertApplicant = db.prepare(`INSERT OR REPLACE INTO applicants (id, data, updated_at) VALUES (?, ?, ?)`);
-    db.transaction((items: Nation[]) => {
-      for (const n of items) upsertApplicant.run(n.id, JSON.stringify(n), now);
-    })(applicants);
-    if (applicants.length > 0) {
-      db.prepare(`DELETE FROM applicants WHERE id NOT IN (${applicants.map(n => n.id).join(",")})`).run();
-    } else {
-      db.prepare(`DELETE FROM applicants`).run();
-    }
-
-    db.prepare(`DELETE FROM wars`).run();
-    const insertWar = db.prepare(`INSERT INTO wars (id, data, updated_at) VALUES (?, ?, ?)`);
-    db.transaction((items: War[]) => {
-      for (const w of items) insertWar.run(w.id, JSON.stringify(w), now);
-    })(wars);
-
-    const upsertBankrec = db.prepare(`INSERT OR REPLACE INTO bankrecs (id, data, updated_at) VALUES (?, ?, ?)`);
-    db.transaction((items: BankRec[]) => {
-      for (const b of items) upsertBankrec.run(b.id, JSON.stringify(b), now);
-    })(bankrecs);
+    fail((await supabase.from("game_info").upsert({ id: 1, data: gameInfoData.game_info, updated_at: now })).error, "game info");
+    await replaceSnapshot("nations", nations.map(n => ({ id: n.id, data: n, updated_at: now })));
+    await replaceSnapshot("applicants", applicants.map(n => ({ id: n.id, data: n, updated_at: now })));
+    await replaceSnapshot("wars", wars.map(w => ({ id: w.id, data: w, updated_at: now })));
+    if (bankrecs.length) fail((await supabase.from("bankrecs").upsert(bankrecs.map(b => ({ id: b.id, data: b, updated_at: now })))).error, "bank records");
 
     if (bknetData?.members) {
-      const upsertBknet = db.prepare(`INSERT OR REPLACE INTO bknet_members (id, data, updated_at) VALUES (?, ?, ?)`);
       const bknetMembers = bknetData.members as Array<{ nation: { id: number } }>;
-      db.transaction((items: typeof bknetMembers) => {
-        for (const m of items) upsertBknet.run(m.nation.id, JSON.stringify(m), now);
-      })(bknetMembers);
-      if (bknetMembers.length > 0) {
-        db.prepare(`DELETE FROM bknet_members WHERE id NOT IN (${bknetMembers.map(m => m.nation.id).join(",")})`).run();
-      }
+      await replaceSnapshot("bknet_members", bknetMembers.map(m => ({ id: m.nation.id, data: m, updated_at: now })));
       console.log(`[PnW Sync] BK Net — ${bknetMembers.length} members synced`);
     }
 
     // ── Stockpile alerts ──────────────────────────────────────────────────────
-    const alertConfig = readStockpileAlertConfig();
+    const alertConfig = await readStockpileAlertConfig();
     if (alertConfig?.enabled) {
       // Clean up sent alerts older than 7 days
-      db.prepare(`DELETE FROM stockpile_alert_queue WHERE sent = 1 AND sent_at < ?`)
-        .run(now - 7 * 24 * 60 * 60 * 1000);
-
-      const bknetRows = db.prepare(`SELECT id, data FROM bknet_members`).all() as Array<{ id: number; data: string }>;
+      fail((await supabase.from("stockpile_alert_queue").delete().eq("sent", 1).lt("sent_at", now - 7 * 86400000)).error, "alert cleanup");
+      const { data: bknetRows, error: bknetError } = await supabase.from("bknet_members").select("id, data");
+      fail(bknetError, "BK Net alert lookup");
       const bknetDiscordRaw = new Map<string, string>();
       const bknetDiscordIdMap = new Map<string, string>();
-      for (const row of bknetRows) {
-        const m = JSON.parse(row.data) as { discord?: { account?: { discord_username?: string; discord_id?: string } } };
+      for (const row of bknetRows ?? []) {
+        const m = row.data as { discord?: { account?: { discord_username?: string; discord_id?: string } } };
         const raw = m.discord?.account?.discord_username;
         const id = m.discord?.account?.discord_id;
         if (raw) bknetDiscordRaw.set(String(row.id), raw);
@@ -232,28 +205,22 @@ export async function sync(): Promise<void> {
       }
 
       // Build set of blockaded nation IDs from active wars
-      const warRows = db.prepare(`SELECT data FROM wars`).all() as Array<{ data: string }>;
       const blockadedIds = new Set<number>();
-      for (const row of warRows) {
-        const w = JSON.parse(row.data) as { naval_blockade: number; att_id: number; def_id: number };
+      for (const w of wars as Array<War & { naval_blockade: number; att_id: number; def_id: number }>) {
         if (!w.naval_blockade) continue;
         if (w.naval_blockade === w.att_id) blockadedIds.add(w.def_id);
         else if (w.naval_blockade === w.def_id) blockadedIds.add(w.att_id);
       }
 
       const oneDayAgo = now - 24 * 60 * 60 * 1000;
-      const insertAlert = db.prepare(
-        `INSERT INTO stockpile_alert_queue (nation_id, nation_name, discord_username, discord_id, resource, amount, num_cities, threshold, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
+      const pendingAlerts: Array<Record<string, unknown>> = [];
 
       for (const nation of nations) {
         if (nation.vacation_mode_turns > 0) continue;
 
         // 24h cooldown per nation (not per resource)
-        const recentAny = db.prepare(
-          `SELECT id FROM stockpile_alert_queue WHERE nation_id = ? AND created_at > ? LIMIT 1`
-        ).get(nation.id, oneDayAgo);
+        const { data: recentAny, error: recentError } = await supabase.from("stockpile_alert_queue").select("id").eq("nation_id", nation.id).gt("created_at", oneDayAgo).limit(1).maybeSingle();
+        fail(recentError, "alert cooldown");
         if (recentAny) continue;
 
         const discord = discordMap.get(String(nation.id)) ?? null;
@@ -269,19 +236,18 @@ export async function sync(): Promise<void> {
           if (!exceedsStockpileThreshold(amount, threshold, resource, nation.num_cities)) continue;
 
           const discordId = bknetDiscordIdMap.get(String(nation.id)) ?? null;
-          insertAlert.run(nation.id, nation.nation_name, discord, discordId, resource, amount, nation.num_cities, threshold, now);
+          pendingAlerts.push({ nation_id: nation.id, nation_name: nation.nation_name, discord_username: discord, discord_id: discordId, resource, amount, num_cities: nation.num_cities, threshold, created_at: now });
         }
       }
+      if (pendingAlerts.length) fail((await supabase.from("stockpile_alert_queue").insert(pendingAlerts)).error, "alert insert");
     }
 
-    db.prepare(
-      `UPDATE sync_status SET last_synced_at=?, status='success', error=NULL, member_count=?, war_count=?, bankrec_count=? WHERE id=1`
-    ).run(now, nations.length, wars.length, bankrecs.length);
+    fail((await supabase.from("sync_status").update({ last_synced_at: now, status: "success", error: null, member_count: nations.length, war_count: wars.length, bankrec_count: bankrecs.length }).eq("id", 1)).error, "sync status success");
 
     console.log(`[PnW Sync] Done — ${nations.length} members, ${wars.length} wars, ${bankrecs.length} bank recs`);
   } catch (err) {
     console.error("[PnW Sync] Failed:", err);
-    db.prepare(`UPDATE sync_status SET status='error', error=? WHERE id=1`).run(String(err));
+    await supabase.from("sync_status").update({ status: "error", error: String(err) }).eq("id", 1);
     throw err;
   }
 }
@@ -302,11 +268,10 @@ interface RawAllianceInfo {
 }
 
 export async function syncAllianceMemberships(): Promise<void> {
-  const { default: db } = await import("./db");
   const now = Date.now();
 
   console.log("[Recruitment Sync] Starting…");
-  db.prepare(`UPDATE recruitment_sync_status SET status='syncing' WHERE id=1`).run();
+  fail((await supabase.from("recruitment_sync_status").update({ status: "syncing" }).eq("id", 1)).error, "recruitment status");
 
   try {
     const allNations: RawNationMembership[] = [];
@@ -339,66 +304,48 @@ export async function syncAllianceMemberships(): Promise<void> {
       aPage++;
     } while (aPage <= aLast);
 
-    const upsertAlliance = db.prepare(
-      `INSERT INTO alliance_names (id, name, acronym, score, color, rank, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET name=excluded.name, acronym=excluded.acronym, score=excluded.score, color=excluded.color, rank=excluded.rank, updated_at=excluded.updated_at`
-    );
-    db.transaction((items: RawAllianceInfo[]) => {
-      for (const a of items) {
-        upsertAlliance.run(Number(a.id), a.name, a.acronym ?? null, a.score ?? null, a.color ?? null, a.rank ?? null, now);
-      }
-    })(allAlliances);
-
-    const upsertMembership = db.prepare(
-      `INSERT INTO alliance_memberships (nation_id, alliance_id, join_date, first_seen, last_seen, left_at)
-       VALUES (?, ?, ?, ?, ?, NULL)
-       ON CONFLICT(nation_id, alliance_id, join_date) DO UPDATE SET last_seen=excluded.last_seen, left_at=NULL`
-    );
+    for (let offset = 0; offset < allAlliances.length; offset += 500) {
+      const rows = allAlliances.slice(offset, offset + 500).map(a => ({ id: Number(a.id), name: a.name, acronym: a.acronym, score: a.score, color: a.color, rank: a.rank, updated_at: now }));
+      fail((await supabase.from("alliance_names").upsert(rows)).error, "alliance names");
+    }
 
     const seenKeys = new Set<string>();
     let scanned = 0;
-    db.transaction((items: RawNationMembership[]) => {
-      for (const n of items) {
-        const allianceId = Number(n.alliance_id);
-        if (!allianceId || !n.alliance_join_date) continue;
-        const joinMs = Date.parse(n.alliance_join_date);
-        if (!Number.isFinite(joinMs)) continue;
-        const nationId = Number(n.id);
-        upsertMembership.run(nationId, allianceId, joinMs, now, now);
-        seenKeys.add(`${nationId}:${allianceId}:${joinMs}`);
-        scanned++;
-      }
-    })(allNations);
+    const existingMemberships = await selectAll<{ nation_id: number; alliance_id: number; join_date: number; first_seen: number }>("alliance_memberships", "nation_id, alliance_id, join_date, first_seen");
+    const firstSeenByKey = new Map(existingMemberships.map(row => [`${row.nation_id}:${row.alliance_id}:${row.join_date}`, row.first_seen]));
+    const membershipRows: Array<Record<string, unknown>> = [];
+    for (const n of allNations) {
+      const allianceId = Number(n.alliance_id);
+      if (!allianceId || !n.alliance_join_date) continue;
+      const joinMs = Date.parse(n.alliance_join_date);
+      if (!Number.isFinite(joinMs)) continue;
+      const nationId = Number(n.id);
+      const key = `${nationId}:${allianceId}:${joinMs}`;
+      membershipRows.push({ nation_id: nationId, alliance_id: allianceId, join_date: joinMs, first_seen: firstSeenByKey.get(key) ?? now, last_seen: now, left_at: null });
+      seenKeys.add(key);
+      scanned++;
+    }
+    for (let offset = 0; offset < membershipRows.length; offset += 500) {
+      fail((await supabase.from("alliance_memberships").upsert(membershipRows.slice(offset, offset + 500), { onConflict: "nation_id,alliance_id,join_date" })).error, "memberships");
+    }
 
     // Close memberships not seen this run.
-    const activeRows = db.prepare(
-      `SELECT nation_id, alliance_id, join_date, last_seen FROM alliance_memberships WHERE left_at IS NULL`
-    ).all() as Array<{ nation_id: number; alliance_id: number; join_date: number; last_seen: number }>;
-
-    const closeMembership = db.prepare(
-      `UPDATE alliance_memberships SET left_at=? WHERE nation_id=? AND alliance_id=? AND join_date=?`
-    );
-    db.transaction((rows: typeof activeRows) => {
-      for (const r of rows) {
-        const key = `${r.nation_id}:${r.alliance_id}:${r.join_date}`;
-        if (!seenKeys.has(key)) {
-          // Use the previous last_seen as a more accurate left timestamp than `now`.
-          closeMembership.run(r.last_seen, r.nation_id, r.alliance_id, r.join_date);
-        }
+    const activeRows = (await selectAll<{ nation_id: number; alliance_id: number; join_date: number; last_seen: number; left_at: number | null }>("alliance_memberships", "nation_id, alliance_id, join_date, last_seen, left_at")).filter(row => row.left_at == null);
+    for (const r of activeRows) {
+      if (!seenKeys.has(`${r.nation_id}:${r.alliance_id}:${r.join_date}`)) {
+        fail((await supabase.from("alliance_memberships").update({ left_at: r.last_seen }).eq("nation_id", r.nation_id).eq("alliance_id", r.alliance_id).eq("join_date", r.join_date)).error, "close membership");
       }
-    })(activeRows);
+    }
 
-    const existing = db.prepare(`SELECT first_snapshot_at FROM recruitment_sync_status WHERE id=1`).get() as { first_snapshot_at: number | null } | undefined;
+    const { data: existing, error: statusError } = await supabase.from("recruitment_sync_status").select("first_snapshot_at").eq("id", 1).maybeSingle();
+    fail(statusError, "recruitment status read");
     const firstSnapshot = existing?.first_snapshot_at ?? now;
-    db.prepare(
-      `UPDATE recruitment_sync_status SET last_synced_at=?, status='success', error=NULL,
-       nations_scanned=?, alliances_scanned=?, first_snapshot_at=? WHERE id=1`
-    ).run(now, scanned, allAlliances.length, firstSnapshot);
+    fail((await supabase.from("recruitment_sync_status").update({ last_synced_at: now, status: "success", error: null, nations_scanned: scanned, alliances_scanned: allAlliances.length, first_snapshot_at: firstSnapshot }).eq("id", 1)).error, "recruitment status success");
 
     console.log(`[Recruitment Sync] Done — ${scanned} memberships, ${allAlliances.length} alliances`);
   } catch (err) {
     console.error("[Recruitment Sync] Failed:", err);
-    db.prepare(`UPDATE recruitment_sync_status SET status='error', error=? WHERE id=1`).run(String(err));
+    await supabase.from("recruitment_sync_status").update({ status: "error", error: String(err) }).eq("id", 1);
     throw err;
   }
 }
@@ -425,8 +372,8 @@ export function startRecruitmentSyncLoop(): void {
   // Run once on boot if last sync was > 23h ago (or never), then every 24h.
   (async () => {
     try {
-      const { default: db } = await import("./db");
-      const row = db.prepare(`SELECT last_synced_at FROM recruitment_sync_status WHERE id=1`).get() as { last_synced_at: number | null } | undefined;
+      const { data: row, error } = await supabase.from("recruitment_sync_status").select("last_synced_at").eq("id", 1).maybeSingle();
+      fail(error, "recruitment schedule status");
       const last = row?.last_synced_at ?? 0;
       const age = Date.now() - last;
       if (age >= 23 * 60 * 60 * 1000) {

@@ -5,7 +5,7 @@ import { readRoleConfig, hasAccess } from "@/lib/role-config";
 
 export async function GET() {
   const session = await getSession();
-  const config = readRoleConfig();
+  const config = await readRoleConfig();
   const canManageRoles = session?.isEmperor || (session != null && hasAccess(config, "/role-config", session.roleIds));
   if (!canManageRoles) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -49,12 +49,14 @@ export default function HomePage() {
           >
             War Targets
           </Link>
-          <Link
-            href="/optimizer"
-            className="px-5 py-2.5 bg-[#161b2e] hover:bg-[#1e2540] border border-[#2a3150] text-slate-300 rounded-lg text-sm font-medium transition-colors"
-          >
-            City Build
-          </Link>
+          {isLoggedIn && (
+            <Link
+              href="/optimizer"
+              className="px-5 py-2.5 bg-[#161b2e] hover:bg-[#1e2540] border border-[#2a3150] text-slate-300 rounded-lg text-sm font-medium transition-colors"
+            >
+              City Build
+            </Link>
+          )}
         </div>
       </div>
     </div>

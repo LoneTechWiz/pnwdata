@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import db from "@/lib/db";
+import { selectAll, supabase } from "@/lib/supabase";
 import {
   recruitsIn,
   retentionFor,
@@ -19,29 +19,18 @@ interface AllianceRow {
 }
 
 export async function GET() {
-  const statusRow = db.prepare(
-    `SELECT last_synced_at, status, error, nations_scanned, alliances_scanned, first_snapshot_at FROM recruitment_sync_status WHERE id=1`
-  ).get() as
-    | {
-        last_synced_at: number | null;
-        status: string;
-        error: string | null;
-        nations_scanned: number | null;
-        alliances_scanned: number | null;
-        first_snapshot_at: number | null;
-      }
-    | undefined;
+  const { data: statusRow, error: statusError } = await supabase
+    .from("recruitment_sync_status")
+    .select("last_synced_at, status, error, nations_scanned, alliances_scanned, first_snapshot_at")
+    .eq("id", 1).maybeSingle();
+  if (statusError) return NextResponse.json({ error: statusError.message }, { status: 500 });
 
   const now = Date.now();
   const firstSnapshotAt = statusRow?.first_snapshot_at ?? null;
 
-  const alliances = db.prepare(
-    `SELECT id, name, acronym, score, color, rank FROM alliance_names`
-  ).all() as AllianceRow[];
+  const alliances = await selectAll<AllianceRow>("alliance_names", "id, name, acronym, score, color, rank");
 
-  const memberships = db.prepare(
-    `SELECT nation_id, alliance_id, join_date, left_at FROM alliance_memberships`
-  ).all() as MembershipRow[];
+  const memberships = await selectAll<MembershipRow>("alliance_memberships", "nation_id, alliance_id, join_date, left_at");
 
   const byAlliance = new Map<number, MembershipRow[]>();
   for (const m of memberships) {

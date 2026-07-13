@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readAppConfig } from "@/lib/app-config";
 
 export interface TieringDefaults {
   allyIds: number[];
@@ -9,11 +8,10 @@ export interface TieringDefaults {
 
 export async function GET() {
   try {
-    const configPath = join(process.cwd(), "data", "war-config.json");
-    const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
+    const config = await readAppConfig<{
       enemy_alliance_ids?: unknown;
       ally_alliance_ids?: unknown;
-    };
+    }>("war-config");
     const allyIds = Array.isArray(config.ally_alliance_ids) ? config.ally_alliance_ids.map(Number) : [];
     const enemyIds = Array.isArray(config.enemy_alliance_ids) ? config.enemy_alliance_ids.map(Number) : [];
     return NextResponse.json({ allyIds, enemyIds } satisfies TieringDefaults);

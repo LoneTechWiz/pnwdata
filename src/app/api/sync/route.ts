@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { sync } from "@/lib/sync";
-import db from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const status = db.prepare("SELECT status FROM sync_status WHERE id = 1").get() as { status: string } | undefined;
+  const { data: status, error } = await supabase.from("sync_status").select("status").eq("id", 1).maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (status?.status === "syncing") {
     return NextResponse.json({ message: "Sync already in progress" }, { status: 409 });
   }
@@ -14,6 +15,7 @@ export async function POST() {
 }
 
 export async function GET() {
-  const status = db.prepare("SELECT * FROM sync_status WHERE id = 1").get();
+  const { data: status, error } = await supabase.from("sync_status").select("*").eq("id", 1).maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(status);
 }
