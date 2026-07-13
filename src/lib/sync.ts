@@ -3,6 +3,7 @@ import { resolveNationDiscord } from "./discord-username";
 import { exceedsStockpileThreshold } from "./stockpile";
 import { selectAll, supabase } from "./supabase";
 import { readAppConfig } from "./app-config";
+import { processSyncRequest } from "./sync-request";
 
 function fail(error: { message: string } | null, context: string) {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -357,16 +358,43 @@ export async function syncAllianceMemberships(): Promise<void> {
 
 const g = globalThis as typeof globalThis & { _pnwSyncStarted?: boolean; _recruitmentSyncStarted?: boolean };
 const RECRUITMENT_START_DELAY_MS = 60 * 1000;
+const SYNC_REQUEST_POLL_MS = 2 * 1000;
+let activeSync: Promise<void> | null = null;
+let processingSyncRequest = false;
+
+export function runSync(): Promise<void> {
+  if (!activeSync) {
+    activeSync = sync().finally(() => {
+      activeSync = null;
+    });
+  }
+  return activeSync;
+}
+
+async function pollSyncRequest(): Promise<void> {
+  if (processingSyncRequest) return;
+  processingSyncRequest = true;
+  try {
+    await processSyncRequest(runSync);
+  } catch (err) {
+    console.error("[PnW Sync] Queued sync failed:", err);
+  } finally {
+    processingSyncRequest = false;
+  }
+}
 
 export function startSyncLoop(): void {
   if (g._pnwSyncStarted) return;
   g._pnwSyncStarted = true;
 
-  sync().catch(err => console.error("[PnW Sync] Initial sync failed:", err));
+  runSync().catch(err => console.error("[PnW Sync] Initial sync failed:", err));
   setInterval(
-    () => sync().catch(err => console.error("[PnW Sync] Periodic sync failed:", err)),
+    () => runSync().catch(err => console.error("[PnW Sync] Periodic sync failed:", err)),
     10 * 60 * 1000
   );
+
+  pollSyncRequest();
+  setInterval(pollSyncRequest, SYNC_REQUEST_POLL_MS);
 
   // The recruitment crawl is API-heavy. Keep it out of the same rate-limit
   // window as the main sync that runs immediately when the worker starts.

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { sync } from "@/lib/sync";
 import { supabase } from "@/lib/supabase";
+import { enqueueSyncRequest } from "@/lib/sync-request";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,17 @@ export async function POST() {
   if (status?.status === "syncing") {
     return NextResponse.json({ message: "Sync already in progress" }, { status: 409 });
   }
-  sync().catch(console.error);
-  return NextResponse.json({ message: "Sync triggered" });
+
+  try {
+    const { request, created } = await enqueueSyncRequest();
+    if (!created) {
+      return NextResponse.json({ message: "Sync already queued", requestId: request.id }, { status: 409 });
+    }
+    return NextResponse.json({ message: "Sync queued for local worker", requestId: request.id }, { status: 202 });
+  } catch (syncError) {
+    console.error("[Sync API] Failed to queue local sync:", syncError);
+    return NextResponse.json({ error: String(syncError) }, { status: 500 });
+  }
 }
 
 export async function GET() {
