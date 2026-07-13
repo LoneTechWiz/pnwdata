@@ -35,9 +35,9 @@ PnW GraphQL API + BK Net REST API
 | File | Role |
 |------|------|
 | `src/lib/supabase.ts` | Server-only Supabase client and shared database lookups |
-| `src/lib/sync.ts` | Fetches PnW + BK Net APIs, writes to Supabase; `startSyncLoop()` runs every 10 min |
+| `src/lib/sync.ts` | Fetches PnW + BK Net APIs and writes to Supabase; `startSyncLoop()` runs the main sync every 10 min and recruitment sync daily |
+| `scripts/sync-worker.ts` | Local-only scheduled sync entrypoint, run persistently by `pnwdata-sync.service` (not by Vercel) |
 | `src/lib/pnw.ts` | TypeScript types + `fetchMembers/fetchWars/...` client fetchers (call `/api/data`) |
-| `src/instrumentation.ts` | Calls `startSyncLoop()` on server boot (Node.js runtime only) |
 | `src/app/api/data/route.ts` | `GET ?type=<table>` — reads Supabase, returns JSON |
 | `src/app/api/sync/route.ts` | `POST` triggers manual sync; `GET` returns status |
 | `src/app/api/warTargets/route.ts` | Calls PnW GraphQL directly; uses Supabase for cached prices and membership lookup |

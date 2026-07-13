@@ -304,8 +304,12 @@ export async function syncAllianceMemberships(): Promise<void> {
       aPage++;
     } while (aPage <= aLast);
 
-    for (let offset = 0; offset < allAlliances.length; offset += 500) {
-      const rows = allAlliances.slice(offset, offset + 500).map(a => ({ id: Number(a.id), name: a.name, acronym: a.acronym, score: a.score, color: a.color, rank: a.rank, updated_at: now }));
+    // Rankings can shift while the paginated crawl is running, causing an
+    // alliance to appear on more than one page. Supabase cannot upsert the
+    // same conflict key twice in a single statement.
+    const uniqueAlliances = [...new Map(allAlliances.map(a => [Number(a.id), a])).values()];
+    for (let offset = 0; offset < uniqueAlliances.length; offset += 500) {
+      const rows = uniqueAlliances.slice(offset, offset + 500).map(a => ({ id: Number(a.id), name: a.name, acronym: a.acronym, score: a.score, color: a.color, rank: a.rank, updated_at: now }));
       fail((await supabase.from("alliance_names").upsert(rows)).error, "alliance names");
     }
 
@@ -321,6 +325,7 @@ export async function syncAllianceMemberships(): Promise<void> {
       if (!Number.isFinite(joinMs)) continue;
       const nationId = Number(n.id);
       const key = `${nationId}:${allianceId}:${joinMs}`;
+      if (seenKeys.has(key)) continue;
       membershipRows.push({ nation_id: nationId, alliance_id: allianceId, join_date: joinMs, first_seen: firstSeenByKey.get(key) ?? now, last_seen: now, left_at: null });
       seenKeys.add(key);
       scanned++;
@@ -340,9 +345,9 @@ export async function syncAllianceMemberships(): Promise<void> {
     const { data: existing, error: statusError } = await supabase.from("recruitment_sync_status").select("first_snapshot_at").eq("id", 1).maybeSingle();
     fail(statusError, "recruitment status read");
     const firstSnapshot = existing?.first_snapshot_at ?? now;
-    fail((await supabase.from("recruitment_sync_status").update({ last_synced_at: now, status: "success", error: null, nations_scanned: scanned, alliances_scanned: allAlliances.length, first_snapshot_at: firstSnapshot }).eq("id", 1)).error, "recruitment status success");
+    fail((await supabase.from("recruitment_sync_status").update({ last_synced_at: now, status: "success", error: null, nations_scanned: scanned, alliances_scanned: uniqueAlliances.length, first_snapshot_at: firstSnapshot }).eq("id", 1)).error, "recruitment status success");
 
-    console.log(`[Recruitment Sync] Done — ${scanned} memberships, ${allAlliances.length} alliances`);
+    console.log(`[Recruitment Sync] Done — ${scanned} memberships, ${uniqueAlliances.length} alliances`);
   } catch (err) {
     console.error("[Recruitment Sync] Failed:", err);
     await supabase.from("recruitment_sync_status").update({ status: "error", error: String(err) }).eq("id", 1);
@@ -351,6 +356,7 @@ export async function syncAllianceMemberships(): Promise<void> {
 }
 
 const g = globalThis as typeof globalThis & { _pnwSyncStarted?: boolean; _recruitmentSyncStarted?: boolean };
+const RECRUITMENT_START_DELAY_MS = 60 * 1000;
 
 export function startSyncLoop(): void {
   if (g._pnwSyncStarted) return;
@@ -362,7 +368,9 @@ export function startSyncLoop(): void {
     10 * 60 * 1000
   );
 
-  startRecruitmentSyncLoop();
+  // The recruitment crawl is API-heavy. Keep it out of the same rate-limit
+  // window as the main sync that runs immediately when the worker starts.
+  setTimeout(startRecruitmentSyncLoop, RECRUITMENT_START_DELAY_MS);
 }
 
 export function startRecruitmentSyncLoop(): void {
