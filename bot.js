@@ -19,6 +19,8 @@ const supabase = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
 
+const APP_URL = (process.env.PNWDATA_APP_URL ?? "https://pnwdata.lonetechwiz.com").replace(/\/$/, "");
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -229,7 +231,7 @@ async function handleTargets(interaction) {
 
   let data;
   try {
-    const res = await fetch(`http://localhost:3000/api/warTargets?nationId=${row.id}`);
+    const res = await fetch(`${APP_URL}/api/warTargets?nationId=${row.id}`);
     if (!res.ok) {
       await interaction.editReply("Failed to fetch war targets. Try again later.");
       return;

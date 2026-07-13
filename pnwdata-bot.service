@@ -1,7 +1,7 @@
 [Unit]
 Description=PnW Alliance Discord Bot
-After=network.target pnwdata.service
-Requires=pnwdata.service
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
