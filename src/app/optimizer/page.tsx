@@ -18,6 +18,12 @@ import {
 } from "@/lib/pnw-formulas";
 import { AppShell } from "@/components/AppShell";
 import { Search, ChevronDown, ChevronUp, Zap, TrendingUp } from "lucide-react";
+import {
+  computeNexusOptimalBuild,
+  NEXUS_COMMERCE_IMPROVEMENTS,
+  recoverNexusTargetProfile,
+  type NexusOptimizerResult,
+} from "@/lib/nexus-city-optimizer";
 
 // ── Power plant definitions ──────────────────────────────────────────────────
 
@@ -704,17 +710,20 @@ export default function OptimizerPage() {
   const [nationId, setNationId] = useState("");
   const [infra, setInfra] = useState("");
   const [land, setLand] = useState("");
-  const [maxCommerce, setMaxCommerce] = useState(100);
   const [projects, setProjects] = useState<OptimizerProjects>(DEFAULT_PROJECTS);
   const [radiationPenalty, setRadiationPenalty] = useState(0);
   const [ageMultiplier, setAgeMultiplier] = useState(1);
   const [domesticPolicy, setDomesticPolicy] = useState("");
+  const [continent, setContinent] = useState("NA");
+  const [cityCount, setCityCount] = useState(1);
   const [prices, setPrices] = useState<Record<string, number>>(FALLBACK_PRICES);
   const [pricesOverridden, setPricesOverridden] = useState(false);
   const [pricesOpen, setPricesOpen] = useState(false);
   const [lookupMsg, setLookupMsg] = useState("");
   const [milCounts, setMilCounts] = useState<Record<string, number>>({ barracks: 0, factories: 0, hangars: 0, dockyards: 0 });
-  const [civilCounts, setCivilCounts] = useState<Record<string, number>>({ hospitals: 0, subway: 0, police_stations: 0, recycling_centers: 0 });
+  const maxCommerce = projects.internationalTradeCenter
+    ? (projects.telecommunicationsSatellite ? 125 : 115)
+    : 100;
 
   const { data: members = [], isLoading } = useQuery({
     queryKey: ["members"], queryFn: fetchMembers,
@@ -738,24 +747,24 @@ export default function OptimizerPage() {
     [pricesOverridden, prices, tradePrices],
   );
 
-  const result = useMemo<OptimizerResult | null>(() => {
+  const result = useMemo<NexusOptimizerResult | null>(() => {
     const i = parseFloat(infra) || 0;
     const l = parseFloat(land) || 0;
     if (i < 100) return null;
-    return computeOptimalBuild(
-      i,
-      l,
-      effectivePrices,
-      maxCommerce,
+    return computeNexusOptimalBuild({
+      infrastructure: i,
+      land: l,
+      prices: effectivePrices,
       projects,
       radiationPenalty,
-      gameInfo?.game_date ?? null,
+      gameDate: gameInfo?.game_date ?? null,
       ageMultiplier,
       domesticPolicy,
-      milCounts,
-      civilCounts,
-    );
-  }, [infra, land, effectivePrices, maxCommerce, projects, radiationPenalty, gameInfo?.game_date, ageMultiplier, domesticPolicy, milCounts, civilCounts]);
+      continent,
+      cityCount,
+      minimumMilitary: milCounts,
+    });
+  }, [infra, land, effectivePrices, projects, radiationPenalty, gameInfo?.game_date, ageMultiplier, domesticPolicy, continent, cityCount, milCounts]);
 
   function lookupNation() {
     const id = nationId.trim();
@@ -770,11 +779,12 @@ export default function OptimizerPage() {
       setLookupMsg(`Found ${member.nation_name} — no city data yet. Enter infra and land manually.`);
       return;
     }
-    const avgInfra = Math.round(cities.reduce((s, c) => s + (c.infrastructure ?? 0), 0) / cities.length);
-    const avgLand  = Math.round(cities.reduce((s, c) => s + (c.land ?? 0), 0) / cities.length);
-    setInfra(avgInfra.toString());
-    setLand(avgLand.toString());
+    const target = recoverNexusTargetProfile(cities.map((city) => ({ ...city })));
+    setInfra(target.targetInfrastructure.toString());
+    setLand(Math.round(target.landUsed).toString());
     setDomesticPolicy(member.domestic_policy ?? "");
+    setContinent((member.continent ?? "NA").toUpperCase());
+    setCityCount(Math.max(1, member.num_cities));
 
     const cityDates = cities
       .map((city) => city.date)
@@ -789,12 +799,6 @@ export default function OptimizerPage() {
         factories: firstCity.factory  ?? 0,
         hangars:   firstCity.hangar   ?? 0,
         dockyards: firstCity.drydock  ?? 0,
-      });
-      setCivilCounts({
-        hospitals:         firstCity.hospital        ?? 0,
-        subway:            firstCity.subway          ?? 0,
-        police_stations:   firstCity.policestation   ?? 0,
-        recycling_centers: firstCity.recycling_center ?? 0,
       });
     }
 
@@ -819,7 +823,6 @@ export default function OptimizerPage() {
       bureauOfDomesticAffairs: !!proj.bureau_of_domestic_affairs,
     };
     setProjects(loadedProjects);
-    setMaxCommerce(loadedProjects.telecommunicationsSatellite ? 125 : loadedProjects.internationalTradeCenter ? 115 : 100);
 
     // Auto-set radiation penalty from game radiation data + nation's continent
     if (gameInfo?.radiation && member.continent) {
@@ -834,7 +837,9 @@ export default function OptimizerPage() {
       }
     }
 
-    setLookupMsg(`Loaded ${member.nation_name} — ${cities.length} cities, avg ${avgInfra} infra, avg ${avgLand} land.`);
+    setLookupMsg(
+      `Loaded ${member.nation_name} — target ${target.targetInfrastructure} infra, median ${Math.round(target.landUsed)} land${target.citiesBelowTarget ? `, ${target.citiesBelowTarget} cities below target` : ""}.`,
+    );
   }
 
   const infraNum = parseFloat(infra) || 0;
@@ -860,7 +865,7 @@ export default function OptimizerPage() {
         <div>
           <h2 className="text-xl font-bold text-white">City Build Optimizer</h2>
           <p className="text-slate-400 text-sm">
-            Enter a nation ID to auto-fill their average infra & land, then see the most profitable improvement build.
+            Nexus-style market optimization across power, production, commerce, and civil improvements.
           </p>
         </div>
 
@@ -895,11 +900,11 @@ export default function OptimizerPage() {
           {/* Infra / Land */}
           <div className="flex gap-4 flex-wrap">
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-400">Avg Infra / City</label>
-              <input type="number" min={0} placeholder="e.g. 2500" value={infra} onChange={e => setInfra(e.target.value)} className={inputCls} style={{ width: 140 }} />
+              <label className="text-xs text-slate-400">Target Infra / City</label>
+              <input type="number" min={0} max={4000} placeholder="e.g. 2500" value={infra} onChange={e => setInfra(e.target.value)} className={inputCls} style={{ width: 140 }} />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-slate-400">Avg Land / City</label>
+              <label className="text-xs text-slate-400">Median Land / City</label>
               <input type="number" min={0} placeholder="e.g. 5000" value={land} onChange={e => setLand(e.target.value)} className={inputCls} style={{ width: 140 }} />
             </div>
             <div className="flex flex-col gap-1">
@@ -926,6 +931,22 @@ export default function OptimizerPage() {
                 <option value="OPEN_MARKETS">Open Markets</option>
               </select>
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Continent</label>
+              <select value={continent} onChange={e => setContinent(e.target.value)} className={inputCls} style={{ width: 150 }}>
+                <option value="NA">North America</option>
+                <option value="SA">South America</option>
+                <option value="EU">Europe</option>
+                <option value="AF">Africa</option>
+                <option value="AS">Asia</option>
+                <option value="AU">Australia</option>
+                <option value="AN">Antarctica</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Nation Cities</label>
+              <input type="number" min={1} value={cityCount} onChange={e => setCityCount(Math.max(1, Number(e.target.value) || 1))} className={inputCls} style={{ width: 110 }} />
+            </div>
           </div>
 
           {/* Projects */}
@@ -947,15 +968,7 @@ export default function OptimizerPage() {
             <div className="flex gap-4 flex-wrap mt-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400">Max Commerce %</label>
-                <select
-                  value={maxCommerce}
-                  onChange={e => setMaxCommerce(Number(e.target.value))}
-                  className="bg-[#1e2540] border border-[#2a3150] rounded text-xs text-slate-200 px-2 py-1 focus:outline-none focus:border-blue-500"
-                >
-                  <option value={100}>100% (base)</option>
-                  <option value={115}>115% (ITC)</option>
-                  <option value={125}>125% (ITC + Telecom Sat)</option>
-                </select>
+                <span className="bg-[#1e2540] border border-[#2a3150] rounded text-xs text-slate-200 px-2 py-1">{maxCommerce}%</span>
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-400">
@@ -1011,41 +1024,9 @@ export default function OptimizerPage() {
             </div>
           </div>
 
-          {/* Civil buildings */}
-          <div className="flex flex-col gap-2">
-            <label className="text-xs text-slate-400">
-              Civil Buildings
-              <span className="text-slate-600"> — Subway adds 8% commerce &amp; reduces pollution. Hospitals eliminate disease for full population.</span>
-            </label>
-            <div className="flex flex-wrap gap-3">
-              {CIVIL_BUILDINGS.map(b => {
-                const max = b.key === "hospitals" && projects.clinicalResearchCenter ? 6
-                  : b.key === "recycling_centers" && projects.recyclingInitiative ? 4
-                  : b.max;
-                return (
-                <div key={b.key} className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-500">{b.name} <span className="text-slate-600">(max {max})</span></span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      className="w-7 h-7 rounded bg-[#1e2540] text-slate-300 hover:bg-[#2a3150] font-bold text-sm flex items-center justify-center"
-                      onClick={() => setCivilCounts(p => ({ ...p, [b.key]: Math.max(0, (p[b.key] ?? 0) - 1) }))}
-                    >−</button>
-                    <input
-                      type="number" min={0} max={max}
-                      value={civilCounts[b.key] ?? 0}
-                      onChange={e => setCivilCounts(p => ({ ...p, [b.key]: Math.min(max, Math.max(0, Number(e.target.value))) }))}
-                      className="w-12 text-center bg-[#0f1117] border border-[#2a3150] rounded text-white text-sm font-bold py-0.5 focus:outline-none focus:border-blue-500"
-                    />
-                    <button
-                      className="w-7 h-7 rounded bg-[#1e2540] text-slate-300 hover:bg-[#2a3150] font-bold text-sm flex items-center justify-center"
-                      onClick={() => setCivilCounts(p => ({ ...p, [b.key]: Math.min(max, (p[b.key] ?? 0) + 1) }))}
-                    >+</button>
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          </div>
+          <p className="text-xs text-slate-500">
+            Hospitals, police stations, recycling centers, and subways are selected automatically by the optimizer.
+          </p>
 
         </div>
 
@@ -1085,7 +1066,9 @@ export default function OptimizerPage() {
         {/* Results */}
         {!result && (
           <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-12 text-center text-slate-500 text-sm">
-            {"Enter at least 100 infra above to see the optimal city build."}
+            {infraNum > 4_000
+              ? "The Nexus optimizer supports target infrastructure up to 4,000."
+              : "Enter at least 100 infra above to see the optimal city build."}
           </div>
         )}
 
@@ -1095,8 +1078,8 @@ export default function OptimizerPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
                 { label: "Total Slots", value: result.totalSlots, sub: `floor(${infraNum}/50)`, color: "text-slate-300" },
-                { label: "Power Slots", value: result.powerSlots, sub: "Nuclear plants", color: "text-yellow-400" },
-                { label: "Military Slots", value: result.milSlots, sub: result.milSlots > 0 ? `${fmtMoney(result.dailyMilCost)}/day` : "none set", color: "text-red-400" },
+                { label: "Power Slots", value: result.powerSlots, sub: result.powerDescription, color: "text-yellow-400" },
+                { label: "Military Slots", value: result.milSlots, sub: result.milSlots > 0 ? "minimum preserved" : "none set", color: "text-red-400" },
                 { label: "Civil Slots", value: result.civilSlots, sub: result.civilSlots > 0 ? `${fmtMoney(result.dailyCivilCost)}/day` : "none set", color: "text-teal-400" },
                 { label: "Economic Slots", value: result.availableSlots, sub: result.unfilledSlots ? `${result.unfilledSlots} unfilled` : "all allocated", color: "text-blue-400" },
                 { label: "Max Commerce", value: `${maxCommerce}%`, sub: result.commercePct >= maxCommerce ? "cap reached" : `${result.commercePct}% reached`, color: "text-green-400" },
@@ -1126,9 +1109,9 @@ export default function OptimizerPage() {
                     Pollution ({result.totalPollution}): <span className="text-green-400">{result.pollutionDisease.toFixed(2)}%</span>
                   </p>
                 )}
-                {(civilCounts.hospitals ?? 0) > 0 && (
+                {result.hospitals > 0 && (
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Hospitals (×{civilCounts.hospitals}): <span className="text-green-400">−{((civilCounts.hospitals ?? 0) * (projects.clinicalResearchCenter ? 3.5 : 2.5)).toFixed(1)}%</span>
+                    Hospitals (×{result.hospitals}): <span className="text-green-400">−{(result.hospitals * (projects.clinicalResearchCenter ? 3.5 : 2.5)).toFixed(1)}%</span>
                   </p>
                 )}
                 <p className="text-xs font-medium mt-1">
@@ -1143,9 +1126,9 @@ export default function OptimizerPage() {
                 <p className="text-xs text-slate-400">
                   Commerce: <span className="text-green-400">{result.commercePct.toFixed(0)}%</span>
                 </p>
-                {(civilCounts.police_stations ?? 0) > 0 && (
+                {result.policeStations > 0 && (
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Police (×{civilCounts.police_stations}): <span className="text-green-400">−{((civilCounts.police_stations ?? 0) * (projects.specializedPoliceTraining ? 3.5 : 2.5)).toFixed(1)}%</span>
+                    Police (×{result.policeStations}): <span className="text-green-400">−{(result.policeStations * (projects.specializedPoliceTraining ? 3.5 : 2.5)).toFixed(1)}%</span>
                   </p>
                 )}
                 <p className="text-xs font-medium mt-1">
@@ -1177,7 +1160,7 @@ export default function OptimizerPage() {
                 <span className="text-slate-300 font-semibold">Power Plant Cost</span>
               </div>
               <p className="text-slate-400 text-xs">
-                {result.powerSlots} × Nuclear Power Plant — {fmtMoney(POWER_TYPES.nuclear.dailyCost)}/day operating each + {fmtNum(dailyNuclearUraniumUsage(infraNum))} uranium/day for {fmtNum(infraNum, 0)} infrastructure
+                {result.powerDescription} — {result.powerFuelDescription} for {fmtNum(infraNum, 0)} infrastructure
               </p>
               <p className="text-yellow-400 font-medium mt-1">{fmtMoney(result.dailyPowerCost)}/day total</p>
             </div>
@@ -1195,7 +1178,7 @@ export default function OptimizerPage() {
                     <span className={`text-xs px-2 py-0.5 rounded border mr-2 ${categoryBg.power}`}>
                       <span className={categoryColors.power}>Power</span>
                     </span>
-                    <span className="text-sm text-white">{result.powerSlots} × Nuclear Power Plant</span>
+                    <span className="text-sm text-white">{result.powerDescription}</span>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-slate-500">Cost</p>
@@ -1218,29 +1201,7 @@ export default function OptimizerPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-500">{result.milSlots} slots</p>
-                      <p className="text-red-400 text-sm font-medium">−{fmtMoney(result.dailyMilCost)}/day</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Civil buildings row */}
-                {result.civilSlots > 0 && (
-                  <div className="px-4 py-3 flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <span className="text-xs px-2 py-0.5 rounded border mr-2 bg-teal-900/30 border-teal-700/30">
-                        <span className="text-teal-400">Civil</span>
-                      </span>
-                      <span className="text-sm text-white">
-                        {CIVIL_BUILDINGS.filter(b => (civilCounts[b.key] ?? 0) > 0)
-                          .map(b => b.key === "subway"
-                            ? `${civilCounts[b.key]} × ${b.name} (+${(civilCounts[b.key] ?? 0) * 8}% commerce)`
-                            : `${civilCounts[b.key]} × ${b.name}`)
-                          .join(", ")}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-500">{result.civilSlots} slots</p>
-                      <p className="text-red-400 text-sm font-medium">−{fmtMoney(result.dailyCivilCost)}/day</p>
+                      <p className="text-slate-500 text-sm">Minimum build constraint</p>
                     </div>
                   </div>
                 )}
@@ -1307,21 +1268,24 @@ export default function OptimizerPage() {
                   </thead>
                   <tbody>
                     {/* Commerce improvements */}
-                    {COMMERCE_IMPS.map(ci => {
+                    {NEXUS_COMMERCE_IMPROVEMENTS.map(ci => {
                       const policyMultiplier = domesticPolicy === "OPEN_MARKETS"
                         ? openMarketsMultiplier(projects.governmentSupportAgency, projects.bureauOfDomesticAffairs)
                         : 1;
-                      const revenue = ci.pct * (0.725 / 50) * result.population * policyMultiplier;
-                      const profit = revenue - ci.dailyCost;
+                      const revenue = ci.commerce * (0.725 / 50) * result.population * policyMultiplier;
+                      const profit = revenue - ci.upkeep;
+                      const cap = ci.key === "bank" && projects.internationalTradeCenter ? 6
+                        : ci.key === "shopping_mall" && projects.telecommunicationsSatellite ? 5
+                        : ci.baseCap;
                       return (
                         <tr key={ci.name} className="border-b border-[#1e2540] hover:bg-[#1a2035]">
                           <td className="px-4 py-2 text-white">{ci.name}</td>
                           <td className="px-4 py-2">
                             <span className="text-xs bg-blue-900/30 text-blue-400 border border-blue-700/30 px-1.5 py-0.5 rounded">Commerce</span>
                           </td>
-                          <td className="px-4 py-2 text-right text-slate-400 text-xs">+{ci.pct}% commerce (max {ci.max}/city)</td>
+                          <td className="px-4 py-2 text-right text-slate-400 text-xs">+{ci.commerce}% commerce (max {cap}/city)</td>
                           <td className="px-4 py-2 text-right text-green-400">{fmtMoney(revenue)}</td>
-                          <td className="px-4 py-2 text-right text-red-400">{fmtMoney(ci.dailyCost)}</td>
+                          <td className="px-4 py-2 text-right text-red-400">{fmtMoney(ci.upkeep)}</td>
                           <td className={`px-4 py-2 text-right font-medium ${profit >= 0 ? "text-blue-300" : "text-red-400"}`}>{fmtMoney(profit)}</td>
                         </tr>
                       );
@@ -1351,7 +1315,7 @@ export default function OptimizerPage() {
             </div>
 
             <p className="text-xs text-slate-600">
-              Commerce income formula: <code>((commerce/50)×0.725 + 0.725) × effective population</code> per day. The search values resource output at current market prices and accounts for specialization, project modifiers, pollution, city age, food consumption, season, and radiation.
+              Nexus model v2 logic: deterministic constrained search across power, resource, manufacturing, support, hospital, and police combinations. Resource output is valued at current market prices with continent limits, specialization, project modifiers, pollution, city age, food consumption, season, and radiation.
             </p>
           </>
         )}

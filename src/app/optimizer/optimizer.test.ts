@@ -1,75 +1,110 @@
 import { describe, expect, it } from "vitest";
-import { computeOptimalBuild, type OptimizerProjects } from "./page";
+import {
+  computeNexusOptimalBuild,
+  recoverNexusTargetProfile,
+  type NexusOptimizerInput,
+  type NexusOptimizerProjects,
+} from "@/lib/nexus-city-optimizer";
 
-const nation526341Projects: OptimizerProjects = {
-  massIrrigation: true,
-  uraniumEnrichment: true,
-  ironWorks: true,
-  bauxiteWorks: true,
-  armsStockpile: true,
-  emergencyGasolineReserve: true,
-  greenTechnologies: true,
-  clinicalResearchCenter: true,
-  specializedPoliceTraining: true,
-  recyclingInitiative: true,
-  falloutShelter: true,
-  internationalTradeCenter: true,
-  telecommunicationsSatellite: true,
-  governmentSupportAgency: true,
-  bureauOfDomesticAffairs: true,
+const projects: NexusOptimizerProjects = {
+  massIrrigation: false,
+  uraniumEnrichment: false,
+  ironWorks: false,
+  bauxiteWorks: false,
+  armsStockpile: false,
+  emergencyGasolineReserve: false,
+  greenTechnologies: false,
+  clinicalResearchCenter: false,
+  specializedPoliceTraining: false,
+  recyclingInitiative: false,
+  falloutShelter: false,
+  internationalTradeCenter: false,
+  telecommunicationsSatellite: false,
+  governmentSupportAgency: false,
+  bureauOfDomesticAffairs: false,
 };
 
-const livePrices = {
-  coal: 5067,
-  oil: 4752,
-  uranium: 2513,
-  iron: 4668,
-  bauxite: 4439,
-  lead: 5077,
-  gasoline: 3943,
-  munitions: 2295,
-  steel: 4772,
-  aluminum: 3462,
-  food: 96,
+const prices = {
+  coal: 3_500, oil: 4_000, uranium: 2_500, iron: 4_500, bauxite: 4_000,
+  lead: 4_000, gasoline: 4_000, munitions: 2_500, steel: 5_000,
+  aluminum: 3_500, food: 150,
 };
 
-describe("city optimizer", () => {
-  it("reproduces the profitable production mix for nation 526341", () => {
-    const result = computeOptimalBuild(
-      3000,
-      7326.6087,
-      livePrices,
-      125,
-      nation526341Projects,
-      26.904,
-      "2126-01-10T00:00:00Z",
-      1.45205,
-      "OPEN_MARKETS",
-      { barracks: 0, factories: 3, hangars: 5, dockyards: 0 },
-      { hospitals: 1, subway: 1, police_stations: 1, recycling_centers: 3 },
-    );
+function optimize(overrides: Partial<NexusOptimizerInput> = {}) {
+  return computeNexusOptimalBuild({
+    infrastructure: 1_000,
+    land: 1_000,
+    prices,
+    projects,
+    radiationPenalty: 0,
+    gameDate: "2126-09-21T00:00:00Z",
+    ageMultiplier: 1.25,
+    domesticPolicy: "MANIFEST_DESTINY",
+    continent: "NA",
+    cityCount: 20,
+    minimumMilitary: { barracks: 0, factories: 0, hangars: 0, dockyards: 0 },
+    ...overrides,
+  });
+}
 
-    const counts = Object.fromEntries(result.build.map((entry) => [entry.name, entry.count]));
-    expect(counts).toMatchObject({
-      Stadium: 3,
-      "Shopping Mall": 5,
-      Bank: 6,
-      Farm: 20,
-      "Munitions Factory": 5,
-      "Aluminum Refinery": 5,
+describe("Nexus city optimizer", () => {
+  it("chooses power by total operating value instead of forcing nuclear", () => {
+    const result = optimize({ infrastructure: 100 });
+
+    expect(result).not.toBeNull();
+    expect(result!.powerBuild).toEqual({ coal: 0, oil: 0, nuclear: 0, wind: 1 });
+  });
+
+  it("respects continent restrictions on raw resources", () => {
+    const market = { ...prices, coal: 100_000 };
+    const northAmerica = optimize({ prices: market, continent: "NA" });
+    const southAmerica = optimize({ prices: market, continent: "SA" });
+
+    expect(northAmerica!.counts.coal_mine).toBeGreaterThan(0);
+    expect(southAmerica!.counts.coal_mine ?? 0).toBe(0);
+  });
+
+  it("selects hospitals and police as part of the profit search", () => {
+    const result = optimize({ infrastructure: 3_000, land: 500 });
+
+    expect(result).not.toBeNull();
+    expect(result!.hospitals).toBeGreaterThan(0);
+    expect(result!.civilSlots).toBeGreaterThanOrEqual(result!.hospitals + result!.policeStations);
+  });
+
+  it("preserves the requested minimum military build", () => {
+    const result = optimize({
+      infrastructure: 2_000,
+      minimumMilitary: { barracks: 2, factories: 3, hangars: 4, dockyards: 1 },
     });
-    expect(result.commercePct).toBe(125);
-    expect(result.totalPollution).toBe(25);
-    expect(result.population).toBeCloseTo(19_904_503 / 46, -2);
-    // Revenue screen net income: total daily profit divided across all 46 cities.
-    const observedNetProfitPerCity = 70_802_200.48 / 46;
-    expect(observedNetProfitPerCity).toBeCloseTo(1_539_178.27, 2);
 
-    // The optimizer excludes unit upkeep and color bonus, so normalize the
-    // observed total before comparing the build-only estimate.
-    const observedBuildProfit = observedNetProfitPerCity + 3_176_700 / 46 - 2_387_760 / 46;
-    expect(Math.abs(result.netProfit - observedBuildProfit) / observedBuildProfit).toBeLessThan(0.01);
-    expect(result.netProfit).toBeLessThan(2_000_000);
-    expect(result.unfilledSlots).toBe(0);
+    expect(result!.counts).toMatchObject({ barracks: 2, factory: 3, hangar: 4, drydock: 1 });
+    expect(result!.milSlots).toBe(10);
+    expect(result!.usedSlots).toBeLessThanOrEqual(result!.totalSlots);
+  });
+
+  it("is deterministic for identical inputs", () => {
+    const first = optimize({ infrastructure: 2_000 });
+    const second = optimize({ infrastructure: 2_000 });
+
+    expect(first!.counts).toEqual(second!.counts);
+    expect(first!.netProfit).toBeCloseTo(second!.netProfit, 6);
+  });
+});
+
+describe("Nexus target recovery", () => {
+  it("uses the highest recovered city, floors slots, and selects median land", () => {
+    const target = recoverNexusTargetProfile([
+      { infrastructure: 1_000, coal_mine: 10, farm: 20, land: 900 },
+      { infrastructure: 1_250, land: 1_100 },
+    ]);
+
+    expect(target).toEqual({
+      targetInfrastructure: 1_500,
+      availableSlots: 30,
+      citiesBelowTarget: 2,
+      infrastructureShortfall: 750,
+      landUsed: 900,
+    });
   });
 });
