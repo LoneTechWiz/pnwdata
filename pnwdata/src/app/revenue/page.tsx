@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { ExportButton } from "@/components/ExportButton";
-import { Wallet, PiggyBank, Landmark, Clock, CalendarDays } from "lucide-react";
+import { Wallet, PiggyBank, Clock, CalendarDays } from "lucide-react";
 
 interface BracketRevenue {
   allianceId: number;
@@ -63,15 +63,6 @@ export default function RevenuePage() {
 
   const brackets = useMemo(() => data?.brackets ?? [], [data]);
 
-  const totals = useMemo(() => brackets.reduce(
-    (acc, b) => ({
-      actual: acc.actual + b.actualMoney,
-      real: acc.real + b.realMoney,
-      safekept: acc.safekept + b.safekeptMoney,
-    }),
-    { actual: 0, real: 0, safekept: 0 },
-  ), [brackets]);
-
   const byAlliance = useMemo(() => {
     const map = new Map<string, { actual: number; real: number; safekept: number }>();
     for (const b of brackets) {
@@ -120,15 +111,6 @@ export default function RevenuePage() {
             <TimeWindowCards label="30-Day Daily Average" icon={CalendarDays} totals={data.dailyAverage30d} />
           </>
         )}
-
-        <section>
-          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">All-Time Totals</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <StatCard label="Actual Collected" value={fmt(totals.actual)} icon={Landmark} color="text-slate-300" sub="Raw in-game tax deposits" />
-            <StatCard label="Real Revenue" value={fmt(totals.real)} icon={Wallet} color="text-green-400" sub="After applying real rates" />
-            <StatCard label="Member Safekept" value={fmt(totals.safekept)} icon={PiggyBank} color="text-yellow-400" sub="Held, not alliance revenue" />
-          </div>
-        </section>
 
         {byAlliance.length > 1 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
