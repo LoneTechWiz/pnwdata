@@ -5,7 +5,6 @@ export interface OffshoreAlliance {
   allianceId: number;
   allianceName: string;
   label: string | null;
-  apiKeyPreview: string;
   addedByDiscordId: string;
   addedByUsername: string;
   status: "pending" | "syncing" | "success" | "error";
@@ -33,17 +32,11 @@ interface OffshoreAllianceRow {
   created_at: number;
 }
 
-export function maskApiKey(apiKey: string): string {
-  if (apiKey.length <= 8) return "••••••••";
-  return `${apiKey.slice(0, 4)}••••${apiKey.slice(-4)}`;
-}
-
 function toPublic(row: OffshoreAllianceRow): OffshoreAlliance {
   return {
     allianceId: row.alliance_id,
     allianceName: row.alliance_name,
     label: row.label,
-    apiKeyPreview: maskApiKey(row.api_key),
     addedByDiscordId: row.added_by_discord_id,
     addedByUsername: row.added_by_username,
     status: row.status as OffshoreAlliance["status"],

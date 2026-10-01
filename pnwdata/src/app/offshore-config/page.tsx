@@ -9,7 +9,6 @@ interface OffshoreAlliance {
   allianceId: number;
   allianceName: string;
   label: string | null;
-  apiKeyPreview: string;
   addedByDiscordId: string;
   addedByUsername: string;
   status: "pending" | "syncing" | "success" | "error";
@@ -149,7 +148,6 @@ export default function OffshoreConfigPage() {
             <thead>
               <tr className="bg-[#1a1f35] text-slate-400 text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-2 font-medium">Alliance</th>
-                <th className="text-left px-4 py-2 font-medium">Key</th>
                 <th className="text-left px-4 py-2 font-medium">Added by</th>
                 <th className="text-left px-4 py-2 font-medium">Status</th>
                 <th className="text-left px-4 py-2 font-medium">Members / Wars / Bank</th>
@@ -166,7 +164,6 @@ export default function OffshoreConfigPage() {
                       <p className="text-white font-medium">{entry.label || entry.allianceName}</p>
                       <p className="text-slate-500 text-xs">{entry.allianceName} · #{entry.allianceId}</p>
                     </td>
-                    <td className="px-4 py-3 font-mono text-slate-400 text-xs">{entry.apiKeyPreview}</td>
                     <td className="px-4 py-3 text-slate-300 text-xs">{entry.addedByUsername}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={entry.status} />
@@ -195,7 +192,7 @@ export default function OffshoreConfigPage() {
               })}
               {(alliances ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-slate-500 text-sm italic">
+                  <td colSpan={6} className="px-4 py-6 text-center text-slate-500 text-sm italic">
                     No offshore or extension alliances configured yet.
                   </td>
                 </tr>
