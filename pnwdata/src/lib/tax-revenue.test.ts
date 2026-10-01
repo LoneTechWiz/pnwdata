@@ -91,7 +91,7 @@ describe("readTaxRevenueSummary", () => {
       { id: 1, date: "2026-01-01", sender_id: 1, tax_id: 30076, money: 1000, steel: 10 },
     ], 1000);
 
-    const [bracket] = readTaxRevenueSummary();
+    const { brackets: [bracket] } = readTaxRevenueSummary();
     expect(bracket.actualMoney).toBe(1000);
     expect(bracket.realMoney).toBe(200);
     expect(bracket.safekeptMoney).toBe(800);
@@ -106,10 +106,43 @@ describe("readTaxRevenueSummary", () => {
       { id: 2, date: "2026-01-01", sender_id: 2, tax_id: 777, money: 500 },
     ], 1000);
 
-    const [bracket] = readTaxRevenueSummary();
+    const { brackets: [bracket] } = readTaxRevenueSummary();
     expect(bracket.allianceId).toBe(14242);
     expect(bracket.allianceName).toBe("Infinity");
     expect(bracket.actualMoney).toBe(500);
     expect(bracket.realMoney).toBe(500); // real rate defaults to nominal (100) until configured
+  });
+});
+
+describe("readTaxRevenueSummary time windows", () => {
+  const NOW = Date.parse("2026-10-01T12:00:00Z");
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    upsertTaxBrackets(9000, [{ id: 30076, bracket_name: "DirectDeposit100100", tax_rate: 100, resource_tax_rate: 100 }], 1000);
+    writeTaxBracketRealRates(9000, 30076, 20, 20);
+  });
+
+  it("sums only records within the last 24 hours for last24h", () => {
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: new Date(NOW - 2 * 60 * 60 * 1000).toISOString(), sender_id: 1, tax_id: 30076, money: 1000 }, // 2h ago
+      { id: 2, date: new Date(NOW - 2 * DAY_MS).toISOString(), sender_id: 2, tax_id: 30076, money: 5000 }, // 2d ago, outside 24h
+    ], 1000);
+
+    const { last24h } = readTaxRevenueSummary(NOW);
+    expect(last24h.actualMoney).toBe(1000);
+    expect(last24h.realMoney).toBe(200);
+    expect(last24h.safekeptMoney).toBe(800);
+  });
+
+  it("averages the last 30 days of collection across 30 days for dailyAverage30d", () => {
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: new Date(NOW - 10 * DAY_MS).toISOString(), sender_id: 1, tax_id: 30076, money: 3000 },
+      { id: 2, date: new Date(NOW - 40 * DAY_MS).toISOString(), sender_id: 2, tax_id: 30076, money: 999999 }, // outside 30d window
+    ], 1000);
+
+    const { dailyAverage30d } = readTaxRevenueSummary(NOW);
+    expect(dailyAverage30d.actualMoney).toBeCloseTo(100); // 3000 / 30
+    expect(dailyAverage30d.realMoney).toBeCloseTo(20); // 600 / 30
   });
 });

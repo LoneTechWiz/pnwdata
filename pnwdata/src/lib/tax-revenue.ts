@@ -60,6 +60,24 @@ export interface BracketRevenue {
   recordCount: number;
 }
 
+export interface TaxMoneyTotals {
+  actualMoney: number;
+  realMoney: number;
+  safekeptMoney: number;
+}
+
+export interface TaxRevenueOverview {
+  brackets: BracketRevenue[];
+  last24h: TaxMoneyTotals;
+  dailyAverage30d: TaxMoneyTotals;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function emptyMoneyTotals(): TaxMoneyTotals {
+  return { actualMoney: 0, realMoney: 0, safekeptMoney: 0 };
+}
+
 function emptyResourceTotals(): Record<ResourceKey, number> {
   return Object.fromEntries(RESOURCE_KEYS.map((key) => [key, 0])) as Record<ResourceKey, number>;
 }
@@ -139,10 +157,14 @@ export function writeTaxBracketRealRates(allianceId: number, bracketId: number, 
   `).run(realMoneyRate, realResourceRate, Date.now(), allianceId, bracketId);
 }
 
-export function readTaxRevenueSummary(): BracketRevenue[] {
+export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverview {
   const configs = readTaxBracketConfigs();
   const configByKey = new Map(configs.map((config) => [`${config.allianceId}:${config.bracketId}`, config]));
   const results = new Map<string, BracketRevenue>();
+  const last24h = emptyMoneyTotals();
+  const last30d = emptyMoneyTotals();
+  const since24h = now - DAY_MS;
+  const since30d = now - 30 * DAY_MS;
 
   function ensure(allianceId: number, bracketId: number): BracketRevenue {
     const key = `${allianceId}:${bracketId}`;
@@ -178,8 +200,9 @@ export function readTaxRevenueSummary(): BracketRevenue[] {
     const resourceRatio = entry.nominalResourceRate > 0 ? entry.realResourceRate / entry.nominalResourceRate : 0;
 
     const money = Number(record.money) || 0;
+    const realMoney = money * moneyRatio;
     entry.actualMoney += money;
-    entry.realMoney += money * moneyRatio;
+    entry.realMoney += realMoney;
 
     for (const key of RESOURCE_KEYS) {
       const value = Number(record[key]) || 0;
@@ -187,6 +210,16 @@ export function readTaxRevenueSummary(): BracketRevenue[] {
       entry.realResources[key] += value * resourceRatio;
     }
     entry.recordCount += 1;
+
+    const recordTime = Date.parse(record.date);
+    if (Number.isFinite(recordTime) && recordTime >= since30d) {
+      last30d.actualMoney += money;
+      last30d.realMoney += realMoney;
+      if (recordTime >= since24h) {
+        last24h.actualMoney += money;
+        last24h.realMoney += realMoney;
+      }
+    }
   }
 
   const mainMeta = readJsonSingleton<{ id: number }>("alliance_meta");
@@ -199,6 +232,16 @@ export function readTaxRevenueSummary(): BracketRevenue[] {
   for (const row of offshoreRows) apply(row.alliance_id, JSON.parse(row.data));
 
   for (const entry of results.values()) entry.safekeptMoney = entry.actualMoney - entry.realMoney;
+  last24h.safekeptMoney = last24h.actualMoney - last24h.realMoney;
+  last30d.safekeptMoney = last30d.actualMoney - last30d.realMoney;
 
-  return [...results.values()].sort((a, b) => b.actualMoney - a.actualMoney);
+  return {
+    brackets: [...results.values()].sort((a, b) => b.actualMoney - a.actualMoney),
+    last24h,
+    dailyAverage30d: {
+      actualMoney: last30d.actualMoney / 30,
+      realMoney: last30d.realMoney / 30,
+      safekeptMoney: last30d.safekeptMoney / 30,
+    },
+  };
 }

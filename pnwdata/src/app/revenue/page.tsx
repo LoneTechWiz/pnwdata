@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatCard } from "@/components/StatCard";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { ExportButton } from "@/components/ExportButton";
-import { Wallet, PiggyBank, Landmark } from "lucide-react";
+import { Wallet, PiggyBank, Landmark, Clock, CalendarDays } from "lucide-react";
 
 interface BracketRevenue {
   allianceId: number;
@@ -22,12 +22,37 @@ interface BracketRevenue {
   recordCount: number;
 }
 
+interface TaxMoneyTotals {
+  actualMoney: number;
+  realMoney: number;
+  safekeptMoney: number;
+}
+
+interface TaxRevenueOverview {
+  brackets: BracketRevenue[];
+  last24h: TaxMoneyTotals;
+  dailyAverage30d: TaxMoneyTotals;
+}
+
 function fmt(n: number) {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
+function TimeWindowCards({ label, icon, totals }: { label: string; icon: typeof Clock; totals: TaxMoneyTotals }) {
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">{label}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <StatCard label="Actual Collected" value={fmt(totals.actualMoney)} icon={icon} color="text-slate-300" />
+        <StatCard label="Real Revenue" value={fmt(totals.realMoney)} icon={Wallet} color="text-green-400" />
+        <StatCard label="Member Safekept" value={fmt(totals.safekeptMoney)} icon={PiggyBank} color="text-yellow-400" />
+      </div>
+    </section>
+  );
+}
+
 export default function RevenuePage() {
-  const { data: brackets = [], isLoading, error } = useQuery<BracketRevenue[]>({
+  const { data, isLoading, error } = useQuery<TaxRevenueOverview>({
     queryKey: ["taxRevenue"],
     queryFn: () => fetch("/api/tax-revenue").then((r) => {
       if (!r.ok) throw new Error("Access denied or failed to load");
@@ -35,6 +60,8 @@ export default function RevenuePage() {
     }),
     refetchInterval: 10 * 60 * 1000,
   });
+
+  const brackets = useMemo(() => data?.brackets ?? [], [data]);
 
   const totals = useMemo(() => brackets.reduce(
     (acc, b) => ({
@@ -87,11 +114,21 @@ export default function RevenuePage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <StatCard label="Actual Collected" value={fmt(totals.actual)} icon={Landmark} color="text-slate-300" sub="Raw in-game tax deposits" />
-          <StatCard label="Real Revenue" value={fmt(totals.real)} icon={Wallet} color="text-green-400" sub="After applying real rates" />
-          <StatCard label="Member Safekept" value={fmt(totals.safekept)} icon={PiggyBank} color="text-yellow-400" sub="Held, not alliance revenue" />
-        </div>
+        {data && (
+          <>
+            <TimeWindowCards label="Last 24 Hours" icon={Clock} totals={data.last24h} />
+            <TimeWindowCards label="30-Day Daily Average" icon={CalendarDays} totals={data.dailyAverage30d} />
+          </>
+        )}
+
+        <section>
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">All-Time Totals</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <StatCard label="Actual Collected" value={fmt(totals.actual)} icon={Landmark} color="text-slate-300" sub="Raw in-game tax deposits" />
+            <StatCard label="Real Revenue" value={fmt(totals.real)} icon={Wallet} color="text-green-400" sub="After applying real rates" />
+            <StatCard label="Member Safekept" value={fmt(totals.safekept)} icon={PiggyBank} color="text-yellow-400" sub="Held, not alliance revenue" />
+          </div>
+        </section>
 
         {byAlliance.length > 1 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
