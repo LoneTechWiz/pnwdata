@@ -58,6 +58,10 @@ export interface BracketRevenue {
   actualResources: Record<ResourceKey, number>;
   realResources: Record<ResourceKey, number>;
   recordCount: number;
+  actualMoney24h: number;
+  realMoney24h: number;
+  safekeptMoney24h: number;
+  recordCount24h: number;
 }
 
 export interface TaxMoneyTotals {
@@ -186,6 +190,10 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
         actualResources: emptyResourceTotals(),
         realResources: emptyResourceTotals(),
         recordCount: 0,
+        actualMoney24h: 0,
+        realMoney24h: 0,
+        safekeptMoney24h: 0,
+        recordCount24h: 0,
       };
       results.set(key, entry);
     }
@@ -218,6 +226,9 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
       if (recordTime >= since24h) {
         last24h.actualMoney += money;
         last24h.realMoney += realMoney;
+        entry.actualMoney24h += money;
+        entry.realMoney24h += realMoney;
+        entry.recordCount24h += 1;
       }
     }
   }
@@ -231,12 +242,15 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
   const offshoreRows = db.prepare("SELECT alliance_id, data FROM offshore_tax_records").all() as Array<{ alliance_id: number; data: string }>;
   for (const row of offshoreRows) apply(row.alliance_id, JSON.parse(row.data));
 
-  for (const entry of results.values()) entry.safekeptMoney = entry.actualMoney - entry.realMoney;
+  for (const entry of results.values()) {
+    entry.safekeptMoney = entry.actualMoney - entry.realMoney;
+    entry.safekeptMoney24h = entry.actualMoney24h - entry.realMoney24h;
+  }
   last24h.safekeptMoney = last24h.actualMoney - last24h.realMoney;
   last30d.safekeptMoney = last30d.actualMoney - last30d.realMoney;
 
   return {
-    brackets: [...results.values()].sort((a, b) => b.actualMoney - a.actualMoney),
+    brackets: [...results.values()].sort((a, b) => b.actualMoney24h - a.actualMoney24h),
     last24h,
     dailyAverage30d: {
       actualMoney: last30d.actualMoney / 30,

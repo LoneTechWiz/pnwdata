@@ -145,4 +145,19 @@ describe("readTaxRevenueSummary time windows", () => {
     expect(dailyAverage30d.actualMoney).toBeCloseTo(100); // 3000 / 30
     expect(dailyAverage30d.realMoney).toBeCloseTo(20); // 600 / 30
   });
+
+  it("scopes each bracket's own actual/real/safekept/recordCount to the last 24 hours", () => {
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: new Date(NOW - 2 * 60 * 60 * 1000).toISOString(), sender_id: 1, tax_id: 30076, money: 1000 }, // within 24h
+      { id: 2, date: new Date(NOW - 2 * DAY_MS).toISOString(), sender_id: 2, tax_id: 30076, money: 5000 }, // outside 24h, still all-time
+    ], 1000);
+
+    const { brackets: [bracket] } = readTaxRevenueSummary(NOW);
+    expect(bracket.actualMoney).toBe(6000); // all-time unaffected
+    expect(bracket.actualMoney24h).toBe(1000);
+    expect(bracket.realMoney24h).toBe(200);
+    expect(bracket.safekeptMoney24h).toBe(800);
+    expect(bracket.recordCount24h).toBe(1);
+    expect(bracket.recordCount).toBe(2);
+  });
 });

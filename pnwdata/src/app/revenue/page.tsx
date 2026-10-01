@@ -20,6 +20,10 @@ interface BracketRevenue {
   realMoney: number;
   safekeptMoney: number;
   recordCount: number;
+  actualMoney24h: number;
+  realMoney24h: number;
+  safekeptMoney24h: number;
+  recordCount24h: number;
 }
 
 interface TaxMoneyTotals {
@@ -97,10 +101,10 @@ export default function RevenuePage() {
               "Nominal Resource %": b.nominalResourceRate,
               "Real Money %": b.realMoneyRate,
               "Real Resource %": b.realResourceRate,
-              "Actual Collected": b.actualMoney,
-              "Real Revenue": b.realMoney,
-              Safekept: b.safekeptMoney,
-              "Tax Records": b.recordCount,
+              "Actual Collected (24h)": b.actualMoney24h,
+              "Real Revenue (24h)": b.realMoney24h,
+              "Safekept (24h)": b.safekeptMoney24h,
+              "Tax Records (24h)": b.recordCount24h,
             }))}
           />
         </div>
@@ -127,43 +131,46 @@ export default function RevenuePage() {
           </div>
         )}
 
-        <div className="rounded-xl border border-[#2a3150] overflow-x-auto">
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead>
-              <tr className="bg-[#1a1f35] text-slate-400 text-xs uppercase tracking-wide">
-                <th className="text-left px-4 py-2 font-medium">Bracket</th>
-                <th className="text-right px-4 py-2 font-medium">Nominal</th>
-                <th className="text-right px-4 py-2 font-medium">Real</th>
-                <th className="text-right px-4 py-2 font-medium">Actual Collected</th>
-                <th className="text-right px-4 py-2 font-medium">Real Revenue</th>
-                <th className="text-right px-4 py-2 font-medium">Safekept</th>
-                <th className="text-right px-4 py-2 font-medium">Tax Records</th>
-              </tr>
-            </thead>
-            <tbody>
-              {brackets.map((b) => (
-                <tr key={`${b.allianceId}:${b.bracketId}`} className="border-t border-[#2a3150] hover:bg-[#1a1f35] transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="text-white font-medium">{b.bracketName}</p>
-                    {byAlliance.length > 1 && <p className="text-slate-500 text-xs">{b.allianceName}</p>}
-                  </td>
-                  <td className="px-4 py-3 text-right text-slate-400 font-mono text-xs">{b.nominalMoneyRate}% / {b.nominalResourceRate}%</td>
-                  <td className="px-4 py-3 text-right text-slate-400 font-mono text-xs">{b.realMoneyRate}% / {b.realResourceRate}%</td>
-                  <td className="px-4 py-3 text-right text-slate-200">{fmt(b.actualMoney)}</td>
-                  <td className="px-4 py-3 text-right text-green-400 font-medium">{fmt(b.realMoney)}</td>
-                  <td className="px-4 py-3 text-right text-yellow-400">{fmt(b.safekeptMoney)}</td>
-                  <td className="px-4 py-3 text-right text-slate-500 text-xs">{b.recordCount}</td>
+        <div>
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">By Bracket (Last 24 Hours)</h3>
+          <div className="rounded-xl border border-[#2a3150] overflow-x-auto">
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead>
+                <tr className="bg-[#1a1f35] text-slate-400 text-xs uppercase tracking-wide">
+                  <th className="text-left px-4 py-2 font-medium">Bracket</th>
+                  <th className="text-right px-4 py-2 font-medium">Nominal</th>
+                  <th className="text-right px-4 py-2 font-medium">Real</th>
+                  <th className="text-right px-4 py-2 font-medium">Actual Collected</th>
+                  <th className="text-right px-4 py-2 font-medium">Real Revenue</th>
+                  <th className="text-right px-4 py-2 font-medium">Safekept</th>
+                  <th className="text-right px-4 py-2 font-medium">Tax Records</th>
                 </tr>
-              ))}
-              {brackets.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-slate-500 text-sm italic">
-                    No tax records synced yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {brackets.map((b) => (
+                  <tr key={`${b.allianceId}:${b.bracketId}`} className="border-t border-[#2a3150] hover:bg-[#1a1f35] transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="text-white font-medium">{b.bracketName}</p>
+                      {byAlliance.length > 1 && <p className="text-slate-500 text-xs">{b.allianceName}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400 font-mono text-xs">{b.nominalMoneyRate}% / {b.nominalResourceRate}%</td>
+                    <td className="px-4 py-3 text-right text-slate-400 font-mono text-xs">{b.realMoneyRate}% / {b.realResourceRate}%</td>
+                    <td className="px-4 py-3 text-right text-slate-200">{fmt(b.actualMoney24h)}</td>
+                    <td className="px-4 py-3 text-right text-green-400 font-medium">{fmt(b.realMoney24h)}</td>
+                    <td className="px-4 py-3 text-right text-yellow-400">{fmt(b.safekeptMoney24h)}</td>
+                    <td className="px-4 py-3 text-right text-slate-500 text-xs">{b.recordCount24h}</td>
+                  </tr>
+                ))}
+                {brackets.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-slate-500 text-sm italic">
+                      No tax records synced yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </AppShell>
