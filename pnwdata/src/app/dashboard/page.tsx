@@ -51,6 +51,7 @@ export default function DashboardPage() {
   const totalScore = active.reduce((s, m) => s + (m.score ?? 0), 0);
   const totalCities = active.reduce((s, m) => s + (m.num_cities ?? 0), 0);
 
+  const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
   const activeIds = new Set(active.map(m => m.id));
   const offWars = wars.filter(w => activeIds.has(w.att_id)).length;
   const defWars = wars.filter(w => activeIds.has(w.def_id)).length;
@@ -116,6 +117,9 @@ export default function DashboardPage() {
                       <a href={`https://politicsandwar.com/nation/id=${m.id}`} target="_blank" rel="noopener noreferrer"
                         className="text-white font-medium hover:text-blue-400 transition-colors">{m.nation_name}</a>
                       <span className="text-slate-500 text-xs ml-2">({m.leader_name})</span>
+                      {showAllianceTag && m.alliance_name && (
+                        <span className="text-sky-400 text-xs ml-2">{m.alliance_name}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-300">{m.num_cities}</td>
                     <td className="px-4 py-3 text-right text-blue-300">{Number(m.score).toLocaleString()}</td>

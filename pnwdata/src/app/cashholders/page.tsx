@@ -64,6 +64,8 @@ export default function CashHoldersPage() {
   const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
 
+  const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
+
   const filtered = useMemo(() => {
     const active = RESOURCES.filter(r => {
       const v = parseFloat(thresholds[r.key as string]);
@@ -127,6 +129,7 @@ export default function CashHoldersPage() {
             filename="resource-holders"
             getData={() => filtered.map(m => ({
               Nation: m.nation_name,
+              Alliance: m.alliance_name ?? "",
               Leader: m.leader_name,
               Discord: discordLinks[String(m.id)]?.username ?? "",
               Cities: m.num_cities,
@@ -186,6 +189,9 @@ export default function CashHoldersPage() {
                         {m.nation_name}
                       </a>
                       <div className="text-xs text-slate-500">{m.leader_name}</div>
+                      {showAllianceTag && m.alliance_name && (
+                        <div className="text-xs text-sky-400">{m.alliance_name}</div>
+                      )}
                       {discordLinks[String(m.id)] && (
                         <div className="text-xs text-indigo-400">{discordLinks[String(m.id)].username}</div>
                       )}

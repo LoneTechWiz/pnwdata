@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db, { readJsonRows, readJsonSingleton } from "@/lib/db";
+import { readAllNations, readAllWars, readAllBankrecs } from "@/lib/merged-data";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +15,13 @@ export async function GET(request: NextRequest) {
 
   switch (type) {
     case "members":
-      return NextResponse.json(readJsonRows("nations"));
+      return NextResponse.json(readAllNations());
     case "applicants":
       return NextResponse.json(readJsonRows("applicants"));
     case "wars":
-      return NextResponse.json(readJsonRows("wars"));
+      return NextResponse.json(readAllWars());
     case "bankrecs":
-      return NextResponse.json(readJsonRows("bankrecs"));
+      return NextResponse.json(readAllBankrecs());
     case "alliance":
       return NextResponse.json(readJsonSingleton("alliance_meta"));
     case "trade_prices":

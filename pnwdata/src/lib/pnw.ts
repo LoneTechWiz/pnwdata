@@ -2,6 +2,8 @@
 
 export interface Nation {
   id: number;
+  alliance_id?: number;
+  alliance_name?: string;
   nation_name: string;
   leader_name: string;
   discord: string;
@@ -98,6 +100,8 @@ export interface War {
 
 export interface BankRec {
   id: number;
+  alliance_id?: number;
+  alliance_name?: string;
   date: string;
   sender_id: number;
   sender_type: number;

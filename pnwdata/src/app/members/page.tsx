@@ -61,6 +61,8 @@ export default function MembersPage() {
   const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
 
+  const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
+
   function handleSort(key: SortKey) {
     if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
@@ -109,6 +111,7 @@ export default function MembersPage() {
               filename="members"
               getData={() => filtered.map(m => ({
                 Nation: m.nation_name,
+                Alliance: m.alliance_name ?? "",
                 Leader: m.leader_name,
                 Discord: discordLinks[String(m.id)]?.username ?? "",
                 Position: m.alliance_position,
@@ -198,6 +201,9 @@ export default function MembersPage() {
                       <a href={`https://politicsandwar.com/nation/id=${m.id}`} target="_blank" rel="noopener noreferrer"
                         className="text-white font-medium hover:text-blue-400 transition-colors block">{m.nation_name}</a>
                       <div className="text-xs text-slate-500">{m.leader_name} · {POSITIONS[m.alliance_position] ?? m.alliance_position}</div>
+                      {showAllianceTag && m.alliance_name && (
+                        <div className="text-xs text-sky-400">{m.alliance_name}</div>
+                      )}
                       {discordLinks[String(m.id)] && (
                         <div className="text-xs text-indigo-400">{discordLinks[String(m.id)].username}</div>
                       )}
