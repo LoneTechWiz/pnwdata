@@ -5,6 +5,7 @@ import db from "./db";
 import { readAppConfig } from "./app-config";
 import { processSyncRequest } from "./sync-request";
 import { syncRaidIntelligence } from "./raid-sync";
+import { upsertTaxBrackets, replaceTaxRecords, type RawTaxBracket, type RawTaxRecord } from "./tax-revenue";
 
 interface StockpileAlertConfig {
   enabled: boolean;
@@ -70,6 +71,17 @@ export const BANK_RECS_QUERY = `
   } } }
 `;
 
+export const TAX_QUERY = `
+  query($id:[Int], $limit:Int) { alliances(id:$id) { data {
+    tax_brackets { id bracket_name tax_rate resource_tax_rate }
+    taxrecs(limit:$limit) {
+      id date sender_id tax_id
+      money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food
+      sender { nation_name }
+    }
+  } } }
+`;
+
 const TRADE_PRICES_QUERY = `
   { tradeprices(first:1) { data {
     id date coal oil uranium iron bauxite lead gasoline munitions steel aluminum food credits
@@ -127,13 +139,14 @@ export async function sync(): Promise<void> {
     const allianceId = Number(meData.me.nation.alliance_id);
     if (!allianceId) throw new Error("Could not determine alliance ID from API key");
 
-    const [allianceData, membersData, warsData, bankData, tradePricesData, gameInfoData] = await Promise.all([
+    const [allianceData, membersData, warsData, bankData, tradePricesData, gameInfoData, taxData] = await Promise.all([
       gql<{ alliances: { data: Alliance[] } }>(ALLIANCE_QUERY, { id: [allianceId] }),
       gql<{ nations: { data: Nation[] } }>(MEMBERS_QUERY, { alliance_id: [allianceId] }),
       gql<{ wars: { data: War[] } }>(WARS_QUERY, { alliance_id: [allianceId] }),
       gql<{ bankrecs: { data: BankRec[] } }>(BANK_RECS_QUERY, { or_id: [allianceId], first: 500 }),
       gql<{ tradeprices: { data: unknown[] } }>(TRADE_PRICES_QUERY),
       gql<{ game_info: { game_date?: string; radiation: Record<string, number> } }>(GAME_INFO_QUERY),
+      gql<{ alliances: { data: Array<{ tax_brackets: RawTaxBracket[] | null; taxrecs: RawTaxRecord[] | null }> } }>(TAX_QUERY, { id: [allianceId], limit: 2000 }),
     ]);
 
     const now = Date.now();
@@ -168,6 +181,10 @@ export async function sync(): Promise<void> {
     db.transaction(() => {
       for (const record of bankrecs) upsertBankRecord.run(record.id, JSON.stringify(record), now);
     })();
+
+    const taxAlliance = taxData.alliances.data[0];
+    if (taxAlliance?.tax_brackets) upsertTaxBrackets(allianceId, taxAlliance.tax_brackets, now);
+    if (taxAlliance?.taxrecs) replaceTaxRecords("tax_records", null, taxAlliance.taxrecs, now);
 
     const alertConfig = await readStockpileAlertConfig();
     if (alertConfig?.enabled) {

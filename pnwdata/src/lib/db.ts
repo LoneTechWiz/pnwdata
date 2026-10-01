@@ -210,6 +210,32 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS tax_bracket_config (
+    alliance_id INTEGER NOT NULL,
+    bracket_id INTEGER NOT NULL,
+    bracket_name TEXT NOT NULL,
+    nominal_money_rate INTEGER NOT NULL,
+    nominal_resource_rate INTEGER NOT NULL,
+    real_money_rate INTEGER NOT NULL,
+    real_resource_rate INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (alliance_id, bracket_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS tax_records (
+    id INTEGER PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS offshore_tax_records (
+    alliance_id INTEGER NOT NULL REFERENCES offshore_alliances(alliance_id) ON DELETE CASCADE,
+    id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (alliance_id, id)
+  );
+
   INSERT OR IGNORE INTO sync_status (id, status) VALUES (1, 'never');
   INSERT OR IGNORE INTO recruitment_sync_status (id, status) VALUES (1, 'never');
   INSERT OR IGNORE INTO raid_sync_status (id, status) VALUES (1, 'never');

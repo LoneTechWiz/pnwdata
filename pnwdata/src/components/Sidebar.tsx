@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, BarChart2, Shield,
   Search, Clock, Target, UserPlus,
-  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt,
 } from "lucide-react";
 
 const nav = [
@@ -34,6 +34,7 @@ const hiddenNav = [
   // Economy
   { label: "Stockpile", href: "/cashholders", icon: DollarSign },
   { label: "Credits", href: "/credits", icon: Coins },
+  { label: "Revenue", href: "/revenue", icon: Wallet },
   // Intel
   { label: "Recruitment", href: "/recruitment", icon: Trophy },
   // Offshore
@@ -148,6 +149,15 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
             >
               <BellRing size={16} />
               Stockpile Alerts
+            </Link>
+            <Link
+              href="/tax-config"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                pathname === "/tax-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+              }`}
+            >
+              <Receipt size={16} />
+              Tax Config
             </Link>
           </>
         )}

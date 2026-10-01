@@ -1,7 +1,8 @@
 import type { Nation, War, BankRec, Alliance } from "./pnw";
 import db from "./db";
-import { gql, ALLIANCE_QUERY, MEMBERS_QUERY, WARS_QUERY, BANK_RECS_QUERY } from "./sync";
+import { gql, ALLIANCE_QUERY, MEMBERS_QUERY, WARS_QUERY, BANK_RECS_QUERY, TAX_QUERY } from "./sync";
 import { listOffshoreAlliances, getOffshoreAllianceRow } from "./offshore-config";
+import { upsertTaxBrackets, replaceTaxRecords, type RawTaxBracket, type RawTaxRecord } from "./tax-revenue";
 
 function replaceOffshoreSnapshot<T>(
   table: "offshore_nations" | "offshore_wars" | "offshore_bankrecs",
@@ -24,11 +25,12 @@ export async function syncOffshoreAlliance(allianceId: number): Promise<void> {
   db.prepare("UPDATE offshore_alliances SET status = 'syncing', error = NULL WHERE alliance_id = ?").run(allianceId);
 
   try {
-    const [allianceData, membersData, warsData, bankData] = await Promise.all([
+    const [allianceData, membersData, warsData, bankData, taxData] = await Promise.all([
       gql<{ alliances: { data: Alliance[] } }>(ALLIANCE_QUERY, { id: [allianceId] }, row.api_key),
       gql<{ nations: { data: Nation[] } }>(MEMBERS_QUERY, { alliance_id: [allianceId] }, row.api_key),
       gql<{ wars: { data: War[] } }>(WARS_QUERY, { alliance_id: [allianceId] }, row.api_key),
       gql<{ bankrecs: { data: BankRec[] } }>(BANK_RECS_QUERY, { or_id: [allianceId], first: 500 }, row.api_key),
+      gql<{ alliances: { data: Array<{ tax_brackets: RawTaxBracket[] | null; taxrecs: RawTaxRecord[] | null }> } }>(TAX_QUERY, { id: [allianceId], limit: 2000 }, row.api_key),
     ]);
 
     const now = Date.now();
@@ -46,6 +48,10 @@ export async function syncOffshoreAlliance(allianceId: number): Promise<void> {
     replaceOffshoreSnapshot("offshore_nations", allianceId, nations, (nation) => nation.id, now);
     replaceOffshoreSnapshot("offshore_wars", allianceId, wars, (war) => war.id, now);
     replaceOffshoreSnapshot("offshore_bankrecs", allianceId, bankrecs, (record) => record.id, now);
+
+    const taxAlliance = taxData.alliances.data[0];
+    if (taxAlliance?.tax_brackets) upsertTaxBrackets(allianceId, taxAlliance.tax_brackets, now);
+    if (taxAlliance?.taxrecs) replaceTaxRecords("offshore_tax_records", allianceId, taxAlliance.taxrecs, now);
 
     db.prepare(`
       UPDATE offshore_alliances

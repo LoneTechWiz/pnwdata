@@ -27,6 +27,8 @@ export const ADMIN_PAGE_PATHS = [
   "/raid-config",
   "/stockpile-alert-config",
   "/offshore-config",
+  "/revenue",
+  "/tax-config",
 ] as const;
 
 export async function readRoleConfig(): Promise<RoleConfig> {

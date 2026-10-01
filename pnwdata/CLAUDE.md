@@ -52,6 +52,9 @@ pnwdata ← authenticated local HTTP → darth-protocol ← Discord gateway
 | `src/lib/offshore-config.ts` | CRUD for member-submitted offshore/extension API keys; verifies each key against the PnW API and masks it before it ever reaches the client |
 | `src/lib/offshore-sync.ts` | Syncs members/wars/bank records per configured offshore alliance into the `offshore_*` tables; `startOffshoreSyncLoop()` runs every 10 min |
 | `src/app/api/offshore-config/route.ts` | GET (any logged-in member) / POST (add+verify a key) / DELETE (submitter or `/offshore-config` role only) |
+| `src/lib/tax-revenue.ts` | Syncs P&W tax brackets + automatic tax collection records (`taxrecs`, distinct from `bankrecs`) per alliance; computes real revenue as `actual × (real_rate / nominal_rate)` using each bracket's admin-configured real rate |
+| `src/app/api/tax-config/route.ts` | GET/POST SQLite-backed real tax rates per bracket; requires `canManage` (Emperor or `/tax-config` role) |
+| `src/app/api/tax-revenue/route.ts` | GET the computed actual/real/safekept revenue per bracket across all alliances; requires `/revenue` role or Emperor |
 
 ### Database Tables
 
@@ -69,6 +72,8 @@ Snapshot rows store JSON text in a `data TEXT` column alongside an `updated_at I
 - `offshore_alliances` — one row per member-submitted offshore/extension API key (masked before leaving the server), who added it, and its sync status/counts
 - `offshore_nations`, `offshore_wars`, `offshore_bankrecs` — same shape as `nations`/`wars`/`bankrecs` but keyed by `(alliance_id, id)`, one set per configured offshore alliance; `ON DELETE CASCADE` from `offshore_alliances`
 - `offshore_alliance_meta` — like `alliance_meta`, keyed by `alliance_id`
+- `tax_bracket_config` — one row per `(alliance_id, bracket_id)`: bracket name + nominal rate synced from P&W, plus the admin-configured real rate (defaults to the nominal rate until edited via `/tax-config`, and is preserved across re-syncs)
+- `tax_records`, `offshore_tax_records` — automatic tax collection events from P&W's `taxrecs` field (not `bankrecs` — those don't carry a usable `tax_id`), same JSON-blob shape as `bankrecs`
 
 ### Frontend Patterns
 
@@ -128,12 +133,15 @@ The sidebar has three tiers:
 | `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
 | `/war-config` | Admin UI to manage enemy/ally alliance IDs in SQLite (canManageRoles only) |
 | `/offshore-config` | Lets any logged-in member submit a P&W API key for an offshore or extension alliance; the app verifies it, detects the alliance automatically, and syncs the same member/war/bank data it tracks for the main alliance. Visible to Emperors and to any role granted access via `/role-config` |
+| `/revenue` | Actual tax collected vs. real alliance revenue vs. member safekept amount, per bracket and per alliance (main + offshore) |
+| `/tax-config` | Admin UI to set the real rate per P&W tax bracket (capped at the bracket's nominal rate); e.g. a bracket nominally at 100/100 with a real rate of 20/20 means 80% of what's collected is member safekeep, not alliance revenue |
 
 ### External APIs
 
 - **PnW GraphQL**: `https://api.politicsandwar.com/graphql?api_key=PNW_API_KEY`
   - Pagination uses `first:` argument (not `limit:`)
   - `alliance_id` from GraphQL returns as **string** — wrap with `Number()` before using as `[Int]`
+  - `Alliance.tax_brackets` and `Alliance.taxrecs` (the latter uses `limit:`, not `first:`) require a dedicated alliance-position permission beyond general bank view access — both return `null` silently if the API key's nation lacks it. `tax_id` on plain `bankrecs` is not a reliable substitute; it's consistently `"0"` even when `taxrecs` has real data.
 
 ### Environment Variables
 
