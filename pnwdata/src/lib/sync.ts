@@ -21,18 +21,18 @@ async function readStockpileAlertConfig(): Promise<StockpileAlertConfig | null> 
 
 const ALERT_RESOURCES = ["money", "coal", "oil", "uranium", "iron", "bauxite", "lead", "gasoline", "munitions", "steel", "aluminum", "food"] as const;
 
-const PNW_API = "https://api.politicsandwar.com/graphql";
+export const PNW_API = "https://api.politicsandwar.com/graphql";
 
-const MY_NATION_QUERY = `{ me { nation { alliance_id } } }`;
+export const MY_NATION_QUERY = `{ me { nation { alliance_id alliance { name } } } }`;
 
-const ALLIANCE_QUERY = `
+export const ALLIANCE_QUERY = `
   query($id:[Int]) { alliances(id:$id) { data {
     id name acronym score color rank average_score flag forum_link discord_link
     money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food
   } } }
 `;
 
-const MEMBERS_QUERY = `
+export const MEMBERS_QUERY = `
   query($alliance_id:[Int]) { nations(alliance_id:$alliance_id, first:500) { data {
     id nation_name leader_name discord score num_cities population color last_active continent
     money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food credits
@@ -48,7 +48,7 @@ const MEMBERS_QUERY = `
   } } }
 `;
 
-const WARS_QUERY = `
+export const WARS_QUERY = `
   query($alliance_id:[Int]) { wars(alliance_id:$alliance_id, active:true, first:1000) { data {
     id date reason war_type turns_left
     att_id att_alliance_id
@@ -61,7 +61,7 @@ const WARS_QUERY = `
   } } }
 `;
 
-const BANK_RECS_QUERY = `
+export const BANK_RECS_QUERY = `
   query($or_id:[Int], $first:Int) { bankrecs(or_id:$or_id, or_type:[2], first:$first) { data {
     id date sender_id sender_type receiver_id receiver_type banker_id note
     money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food tax_id
@@ -94,8 +94,8 @@ const ALL_ALLIANCES_QUERY = `
   } }
 `;
 
-async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const apiKey = process.env.PNW_API_KEY;
+export async function gql<T>(query: string, variables?: Record<string, unknown>, apiKeyOverride?: string): Promise<T> {
+  const apiKey = apiKeyOverride ?? process.env.PNW_API_KEY;
   if (!apiKey) throw new Error("PNW_API_KEY is not configured");
   const response = await fetch(`${PNW_API}?api_key=${encodeURIComponent(apiKey)}`, {
     method: "POST",

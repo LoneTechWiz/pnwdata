@@ -49,6 +49,9 @@ pnwdata ← authenticated local HTTP → darth-protocol ← Discord gateway
 | `src/app/api/war-config/route.ts` | GET/POST SQLite-backed war configuration; requires `canManage` (Emperor or `/war-config` role) |
 | `src/lib/session.ts` | JWT session helpers (HS256 via `jose`); reads `SESSION_SECRET` |
 | `src/lib/role-config.ts` | Reads/writes SQLite-backed role configuration; `hasAccess()` checks Discord role IDs |
+| `src/lib/offshore-config.ts` | CRUD for member-submitted offshore/extension API keys; verifies each key against the PnW API and masks it before it ever reaches the client |
+| `src/lib/offshore-sync.ts` | Syncs members/wars/bank records per configured offshore alliance into the `offshore_*` tables; `startOffshoreSyncLoop()` runs every 10 min |
+| `src/app/api/offshore-config/route.ts` | GET (any logged-in member) / POST (add+verify a key) / DELETE (submitter or `/offshore-config` role only) |
 
 ### Database Tables
 
@@ -63,6 +66,9 @@ Snapshot rows store JSON text in a `data TEXT` column alongside an `updated_at I
 - `discord_nation_links` — nation-to-Discord mappings derived from server nicknames by `darth-protocol`
 - `game_info` — single row (id=1) with radiation levels per continent
 - `sync_status` — single row (id=1) tracking last sync time, status, counts
+- `offshore_alliances` — one row per member-submitted offshore/extension API key (masked before leaving the server), who added it, and its sync status/counts
+- `offshore_nations`, `offshore_wars`, `offshore_bankrecs` — same shape as `nations`/`wars`/`bankrecs` but keyed by `(alliance_id, id)`, one set per configured offshore alliance; `ON DELETE CASCADE` from `offshore_alliances`
+- `offshore_alliance_meta` — like `alliance_meta`, keyed by `alliance_id`
 
 ### Frontend Patterns
 
@@ -121,6 +127,7 @@ The sidebar has three tiers:
 | `/raid-config` | Admin UI for the minimum raid inactivity threshold |
 | `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
 | `/war-config` | Admin UI to manage enemy/ally alliance IDs in SQLite (canManageRoles only) |
+| `/offshore-config` | Lets any logged-in member submit a P&W API key for an offshore or extension alliance; the app verifies it, detects the alliance automatically, and syncs the same member/war/bank data it tracks for the main alliance. Visible to Emperors and to any role granted access via `/role-config` |
 
 ### External APIs
 
@@ -146,6 +153,7 @@ PNW_DB_PATH=           # SQLite path (defaults to data/pnw.db)
   - `enemy_alliance_ids: number[]` — enemy alliance IDs; fetched live by `/api/warTargets` and `/api/conflictStats`
   - `ally_alliance_ids: number[]` — ally alliance IDs; used by `/api/conflictStats` to label each coalition side
 - SQLite `app_config` row `raid-finder-config` stores the minimum inactive days; manage it via `/raid-config`
+- Offshore/extension API keys live in the dedicated `offshore_alliances` table (not `app_config`), since each key belongs to a specific submitter and alliance rather than being a single shared setting; manage it via `/offshore-config`
 
 ### Discord Bot Boundary
 

@@ -164,6 +164,52 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS offshore_alliances (
+    alliance_id INTEGER PRIMARY KEY,
+    alliance_name TEXT NOT NULL,
+    label TEXT,
+    api_key TEXT NOT NULL,
+    added_by_discord_id TEXT NOT NULL,
+    added_by_username TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT,
+    member_count INTEGER NOT NULL DEFAULT 0,
+    war_count INTEGER NOT NULL DEFAULT 0,
+    bankrec_count INTEGER NOT NULL DEFAULT 0,
+    last_synced_at INTEGER,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS offshore_nations (
+    alliance_id INTEGER NOT NULL REFERENCES offshore_alliances(alliance_id) ON DELETE CASCADE,
+    id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (alliance_id, id)
+  );
+
+  CREATE TABLE IF NOT EXISTS offshore_wars (
+    alliance_id INTEGER NOT NULL REFERENCES offshore_alliances(alliance_id) ON DELETE CASCADE,
+    id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (alliance_id, id)
+  );
+
+  CREATE TABLE IF NOT EXISTS offshore_bankrecs (
+    alliance_id INTEGER NOT NULL REFERENCES offshore_alliances(alliance_id) ON DELETE CASCADE,
+    id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (alliance_id, id)
+  );
+
+  CREATE TABLE IF NOT EXISTS offshore_alliance_meta (
+    alliance_id INTEGER PRIMARY KEY REFERENCES offshore_alliances(alliance_id) ON DELETE CASCADE,
+    data TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   INSERT OR IGNORE INTO sync_status (id, status) VALUES (1, 'never');
   INSERT OR IGNORE INTO recruitment_sync_status (id, status) VALUES (1, 'never');
   INSERT OR IGNORE INTO raid_sync_status (id, status) VALUES (1, 'never');
