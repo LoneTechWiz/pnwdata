@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved } from "@/lib/pnw";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -24,34 +24,18 @@ export default function InactivePage() {
     queryFn: fetchMembers,
     refetchInterval: 10 * 60 * 1000,
   });
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
   const { data: status } = useQuery({
     queryKey: ["syncStatus"],
     queryFn: fetchSyncStatus,
     refetchInterval: 15_000,
   });
-  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
+  const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
   if (members.length === 0 && (status?.status === "never" || status?.status === "syncing")) {
     return <AppShell><SyncingPlaceholder /></AppShell>;
   }
-
-  const bknetDiscord = new Map(
-    bknetMembers
-      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
-      .map(m => {
-        const id = m.discord?.account?.discord_id;
-        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
-        return [String(m.nation.id), name] as [string, string];
-      })
-      .filter(([, name]) => name)
-  );
 
   const inactive = members
     .filter(m => m.vacation_mode_turns === 0 && hoursAgo(m.last_active) > THRESHOLD_HOURS)
@@ -74,7 +58,7 @@ export default function InactivePage() {
               Nation: m.nation_name,
               Leader: m.leader_name,
               Position: m.alliance_position,
-              Discord: bknetDiscord.get(String(m.id)) ?? "",
+              Discord: discordLinks[String(m.id)]?.username ?? "",
               Cities: m.num_cities,
               Score: m.score,
               "Last Active": m.last_active,
@@ -126,8 +110,8 @@ export default function InactivePage() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        {bknetDiscord.has(String(m.id))
-                          ? <span className="text-indigo-400 text-xs">{bknetDiscord.get(String(m.id))}</span>
+                        {discordLinks[String(m.id)]
+                          ? <span className="text-indigo-400 text-xs">{discordLinks[String(m.id)].username}</span>
                           : <span className="text-slate-600 text-xs">—</span>
                         }
                       </td>

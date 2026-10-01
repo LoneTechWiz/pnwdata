@@ -36,3 +36,26 @@ export async function getOpenGlobalTrades(): Promise<Trade[]> {
 export function marketUrl(resource: string): string {
   return `https://politicsandwar.com/index.php?id=26&resource1=${encodeURIComponent(resource.toLowerCase())}`;
 }
+
+export function existingOfferUrl(trade: Trade): string {
+  const url = new URL("https://politicsandwar.com/index.php");
+  url.search = new URLSearchParams({
+    id: "26", display: "nation", resource1: trade.offer_resource.toLowerCase(),
+    buysell: trade.buy_or_sell, ob: "date", od: "DESC", maximum: "1000", minimum: "0", search: "Go",
+  }).toString();
+  return url.toString();
+}
+
+export function replacementPrice(trade: Trade, bestPrice: number): number {
+  // Use whole-dollar suggestions and keep sell prices positive.
+  return trade.buy_or_sell === "sell" ? Math.max(1, Math.ceil(bestPrice) - 1) : Math.floor(bestPrice) + 1;
+}
+
+export function replacementOfferUrl(trade: Trade, bestPrice: number): string {
+  const url = new URL("https://politicsandwar.com/nation/trade/create/");
+  url.search = new URLSearchParams({
+    resource: trade.offer_resource.toLowerCase(), p: String(replacementPrice(trade, bestPrice)),
+    q: String(trade.offer_amount), t: trade.buy_or_sell === "sell" ? "s" : "b",
+  }).toString();
+  return url.toString();
+}

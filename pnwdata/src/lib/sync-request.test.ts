@@ -3,43 +3,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 let storedValue: unknown = null;
 let syncStatus: Record<string, unknown> = { status: "success", error: null };
 
-vi.mock("./supabase", () => ({
-  supabase: {
-    from(table: string) {
-      if (table === "app_config") {
+vi.mock("./db", () => ({
+  default: {
+    prepare(sql: string) {
+      if (sql.includes("SELECT value FROM app_config")) {
         return {
-          select() {
-            return {
-              eq() {
-                return {
-                  async maybeSingle() {
-                    return { data: storedValue ? { value: storedValue } : null, error: null };
-                  },
-                };
-              },
-            };
-          },
-          async upsert(row: { value: unknown }) {
-            storedValue = row.value;
-            return { error: null };
+          get: () => storedValue == null ? undefined : { value: JSON.stringify(storedValue) },
+        };
+      }
+      if (sql.includes("INSERT INTO app_config")) {
+        return {
+          run: (_key: string, value: string) => {
+            storedValue = JSON.parse(value);
+            return { changes: 1 };
           },
         };
       }
-
-      if (table === "sync_status") {
+      if (sql.includes("UPDATE sync_status")) {
         return {
-          update(values: Record<string, unknown>) {
-            return {
-              async eq() {
-                syncStatus = { ...syncStatus, ...values };
-                return { error: null };
-              },
-            };
+          run: () => {
+            syncStatus = { status: "syncing", error: null };
+            return { changes: 1 };
           },
         };
       }
-
-      throw new Error(`Unexpected table: ${table}`);
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+    transaction<T extends () => unknown>(operation: T): T {
+      return operation;
     },
   },
 }));

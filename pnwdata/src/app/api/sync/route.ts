@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import db from "@/lib/db";
 import { enqueueSyncRequest } from "@/lib/sync-request";
+import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const { data: status, error } = await supabase.from("sync_status").select("status").eq("id", 1).maybeSingle();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!(await getSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const status = db.prepare("SELECT status FROM sync_status WHERE id = 1").get() as { status: string } | undefined;
   if (status?.status === "syncing") {
     return NextResponse.json({ message: "Sync already in progress" }, { status: 409 });
   }
@@ -17,14 +20,13 @@ export async function POST() {
       return NextResponse.json({ message: "Sync already queued", requestId: request.id }, { status: 409 });
     }
     return NextResponse.json({ message: "Sync queued for local worker", requestId: request.id }, { status: 202 });
-  } catch (syncError) {
-    console.error("[Sync API] Failed to queue local sync:", syncError);
-    return NextResponse.json({ error: String(syncError) }, { status: 500 });
+  } catch (error) {
+    console.error("[Sync API] Failed to queue local sync:", error);
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
 
 export async function GET() {
-  const { data: status, error } = await supabase.from("sync_status").select("*").eq("id", 1).maybeSingle();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(status);
+  const status = db.prepare("SELECT * FROM sync_status WHERE id = 1").get();
+  return NextResponse.json(status ?? null);
 }

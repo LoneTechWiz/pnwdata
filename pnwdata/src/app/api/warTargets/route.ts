@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getNationRecord, readJsonSingleton } from "@/lib/supabase";
+import { getNationRecord, readJsonSingleton } from "@/lib/db";
 import { readAppConfig } from "@/lib/app-config";
 import {
-  attackLootValue,
   avgInfraPerCity,
   beigeAverage,
   recordBeigeLoss,

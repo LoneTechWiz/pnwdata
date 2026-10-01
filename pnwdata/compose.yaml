@@ -1,0 +1,20 @@
+services:
+  pnwdata:
+    build:
+      context: .
+    image: pnwdata:local
+    restart: unless-stopped
+    ports:
+      - "${PNWDATA_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PNW_DB_PATH: /app/data/pnw.db
+      PNW_API_KEY: ${PNW_API_KEY:-}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      BOT_SERVICE_TOKEN: ${BOT_SERVICE_TOKEN:-}
+      DARTH_PROTOCOL_URL: ${DARTH_PROTOCOL_URL:-http://host.docker.internal:3100}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data

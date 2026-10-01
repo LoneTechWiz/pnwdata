@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved } from "@/lib/pnw";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -20,32 +20,15 @@ export default function RelinkPage() {
     refetchInterval: 10 * 60 * 1000,
   });
 
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
-
   const { data: status } = useQuery({
     queryKey: ["syncStatus"],
     queryFn: fetchSyncStatus,
     refetchInterval: 15_000,
   });
 
-  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
+  const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
 
-  const bknetDiscord = new Map(
-    bknetMembers
-      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
-      .map(m => {
-        const id = m.discord?.account?.discord_id;
-        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
-        return [String(m.nation.id), name] as [string, string];
-      })
-      .filter(([, name]) => name)
-  );
-
-  const unlinked = members.filter(m => !bknetDiscord.get(String(m.id)));
+  const unlinked = members.filter(m => !discordLinks[String(m.id)]);
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
@@ -60,7 +43,7 @@ export default function RelinkPage() {
           <div>
             <h2 className="text-xl font-bold text-white">Relink</h2>
             <p className="text-slate-400 text-sm">
-              {unlinked.length} member{unlinked.length !== 1 ? "s" : ""} with no Discord linked in BK Net
+              {unlinked.length} member{unlinked.length !== 1 ? "s" : ""} with no nation ID in a Discord nickname
             </p>
           </div>
           <ExportButton
@@ -80,7 +63,7 @@ export default function RelinkPage() {
 
         {unlinked.length === 0 ? (
           <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-12 text-center">
-            <p className="text-slate-400">All members have Discord linked in BK Net.</p>
+            <p className="text-slate-400">All members are linked by their Discord server nickname.</p>
           </div>
         ) : (
           <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl overflow-x-auto">

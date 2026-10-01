@@ -1,5 +1,6 @@
 // src/proxy.ts
 import { NextRequest, NextResponse } from "next/server";
+import { getPublicUrl } from "@/lib/site-url";
 import { verifySessionToken } from "@/lib/session";
 import { readRoleConfig, hasAccess } from "@/lib/role-config";
 
@@ -28,13 +29,13 @@ export async function proxy(req: NextRequest) {
   const session = token ? await verifySessionToken(token) : null;
 
   if (!session) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(getPublicUrl("/login", req));
   }
 
   // Emperor bypasses all role checks
   if (session.isEmperor) return NextResponse.next();
 
-  // Check the Supabase-backed role configuration for protected routes.
+  // Check the local role configuration for protected routes.
   const config = await readRoleConfig();
   if (hasAccess(config, pathname, session.roleIds)) {
     return NextResponse.next();

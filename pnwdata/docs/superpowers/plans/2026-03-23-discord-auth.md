@@ -642,7 +642,7 @@ import { Suspense } from "react";
 import { Shield } from "lucide-react";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  not_member: "You must be a member of the Black Knights Discord server to log in.",
+  not_member: "You must be a member of The Empire Discord server to log in.",
   invalid_state: "Authentication failed. Please try again.",
   token_exchange: "Authentication failed. Please try again.",
 };
@@ -657,12 +657,12 @@ function LoginContent() {
       <div className="bg-[#161b2e] border border-[#2a3150] rounded-2xl p-10 flex flex-col items-center gap-6 w-full max-w-sm">
         <div className="flex items-center gap-3">
           <Shield size={28} className="text-blue-400" />
-          <span className="text-white font-bold text-xl">BK Analytics</span>
+          <span className="text-white font-bold text-xl">The Empire Analytics</span>
         </div>
 
         <div className="text-center">
           <h1 className="text-white font-semibold text-lg">Sign in to continue</h1>
-          <p className="text-slate-400 text-sm mt-1">Black Knights members only</p>
+          <p className="text-slate-400 text-sm mt-1">The Empire members only</p>
         </div>
 
         {errorMsg && (

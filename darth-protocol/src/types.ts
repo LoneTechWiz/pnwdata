@@ -1,12 +1,22 @@
 export type GuildSettings = {
-  channelId: string;
   intervalSeconds: number;
 };
 
 export type WatchState = {
   guilds: Record<string, GuildSettings>;
+  /** Members who explicitly opted in, grouped by server. */
+  registrations: Record<string, string[]>;
   /** offer keys that were uncompetitive on the prior successful scan */
   alertedOffers: string[];
+  /** Saved alert pages so navigation still works after a bot restart. */
+  alertSummaries: Record<string, AlertSummary>;
+};
+
+export type AlertSummary = {
+  guildId: string;
+  guildName: string;
+  memberId: string;
+  offers: { trade: Trade; bestPrice: number; marketBestPrice?: number }[];
 };
 
 export type Trade = {

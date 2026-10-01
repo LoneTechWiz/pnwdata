@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readJsonSingleton } from "@/lib/supabase";
+import { readJsonSingleton } from "@/lib/db";
 import { readAppConfig } from "@/lib/app-config";
 
 export const dynamic = "force-dynamic";
@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
     maxScore = Math.ceil(yourScore * 4 / 3);
   }
 
-  // Trade prices from Supabase for resource valuation
+  // Trade prices from the local SQLite snapshot for resource valuation
   type Prices = {
     coal: number; oil: number; uranium: number; iron: number; bauxite: number;
     lead: number; gasoline: number; munitions: number; steel: number; aluminum: number; food: number;

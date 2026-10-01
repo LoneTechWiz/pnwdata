@@ -13,6 +13,7 @@ export interface TradePrices {
 }
 
 export interface LootAttack {
+  type?: string;
   money_looted: number;
   coal_looted: number;
   oil_looted: number;
@@ -27,6 +28,11 @@ export interface LootAttack {
   food_looted: number;
 }
 
+export interface AttackLootBreakdown {
+  nationLoot: number;
+  allianceLoot: number;
+}
+
 export function warTargetScoreRange(yourScore: number): { minScore: number; maxScore: number } {
   return {
     minScore: Math.floor(yourScore * 0.75),
@@ -35,22 +41,36 @@ export function warTargetScoreRange(yourScore: number): { minScore: number; maxS
 }
 
 export function attackLootValue(attacks: LootAttack[], prices: TradePrices | null): number {
-  return attacks.reduce((sum, a) => {
-    const resourceValue = !prices
+  return attacks.reduce((sum, attack) => sum + singleAttackLootValue(attack, prices), 0);
+}
+
+function singleAttackLootValue(attack: LootAttack, prices: TradePrices | null): number {
+  const resourceValue = !prices
       ? 0
-      : a.coal_looted * prices.coal +
-        a.oil_looted * prices.oil +
-        a.uranium_looted * prices.uranium +
-        a.iron_looted * prices.iron +
-        a.bauxite_looted * prices.bauxite +
-        a.lead_looted * prices.lead +
-        a.gasoline_looted * prices.gasoline +
-        a.munitions_looted * prices.munitions +
-        a.steel_looted * prices.steel +
-        a.aluminum_looted * prices.aluminum +
-        a.food_looted * prices.food;
-    return sum + a.money_looted + resourceValue;
-  }, 0);
+      : attack.coal_looted * prices.coal +
+        attack.oil_looted * prices.oil +
+        attack.uranium_looted * prices.uranium +
+        attack.iron_looted * prices.iron +
+        attack.bauxite_looted * prices.bauxite +
+        attack.lead_looted * prices.lead +
+        attack.gasoline_looted * prices.gasoline +
+        attack.munitions_looted * prices.munitions +
+        attack.steel_looted * prices.steel +
+        attack.aluminum_looted * prices.aluminum +
+        attack.food_looted * prices.food;
+  return attack.money_looted + resourceValue;
+}
+
+export function attackLootBreakdown(
+  attacks: LootAttack[],
+  prices: TradePrices | null,
+): AttackLootBreakdown {
+  return attacks.reduce<AttackLootBreakdown>((totals, attack) => {
+    const value = singleAttackLootValue(attack, prices);
+    if (attack.type === "VICTORY") totals.nationLoot += value;
+    if (attack.type === "ALLIANCELOOT") totals.allianceLoot += value;
+    return totals;
+  }, { nationLoot: 0, allianceLoot: 0 });
 }
 
 export function avgInfraPerCity(cities: { infrastructure: number }[]): number {

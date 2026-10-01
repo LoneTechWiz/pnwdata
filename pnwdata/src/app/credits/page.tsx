@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus } from "@/lib/pnw";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus } from "@/lib/pnw";
 import { ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
@@ -24,18 +24,8 @@ export default function CreditsPage() {
     queryFn: fetchMembers,
     refetchInterval: 10 * 60 * 1000,
   });
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
+  const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
-
-  const bknetDiscord = useMemo(() => new Map(
-    bknetMembers
-      .filter(m => m.discord?.account?.discord_username)
-      .map(m => [String(m.nation.id), m.discord!.account!.discord_username] as [string, string])
-  ), [bknetMembers]);
 
   const sorted = useMemo(() => {
     return members
@@ -82,7 +72,7 @@ export default function CreditsPage() {
             getData={() => sorted.map(m => ({
               Nation: m.nation_name,
               Leader: m.leader_name,
-              Discord: bknetDiscord.get(String(m.id)) ?? "",
+              Discord: discordLinks[String(m.id)]?.username ?? "",
               Cities: m.num_cities,
               Credits: m.credits ?? 0,
             }))}
@@ -130,8 +120,8 @@ export default function CreditsPage() {
                         {m.nation_name}
                       </a>
                       <div className="text-xs text-slate-500">{m.leader_name}</div>
-                      {bknetDiscord.has(String(m.id)) && (
-                        <div className="text-xs text-indigo-400">{bknetDiscord.get(String(m.id))}</div>
+                      {discordLinks[String(m.id)] && (
+                        <div className="text-xs text-indigo-400">{discordLinks[String(m.id)].username}</div>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.num_cities}</td>

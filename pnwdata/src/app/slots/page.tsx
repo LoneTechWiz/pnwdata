@@ -54,7 +54,7 @@ export default function SlotsPage() {
 
   const memberIdSet = useMemo(() => new Set(members.map(m => String(m.id))), [members]);
 
-  // Count wars per BK member where their MAPs >= 11 (need to use attacks)
+  // Count wars per MPR member where their MAPs >= 11 (need to use attacks)
   const fullMapsCount = useMemo(() => {
     const counts = new Map<string, number>();
     for (const war of wars) {

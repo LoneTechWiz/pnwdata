@@ -9,23 +9,25 @@ npm run dev      # Start dev server (http://localhost:3000) with Turbopack
 npm run build    # Production build
 npm run start    # Start production server
 npm run lint     # Run ESLint
-./start.sh       # Install deps if missing, then run dev (convenience wrapper)
+npm test         # Run Vitest suite
+npm run sync:worker # Run the local scheduled sync worker
+docker compose up -d --build # Build and run the complete local runtime
 ```
-
-No test suite exists in this project.
 
 ## Architecture
 
-This is a **Politics and War (PnW) alliance analytics dashboard** — a Next.js 16 App Router app that syncs data from external APIs into Supabase and serves it to a React frontend.
+This is a **Politics and War (PnW) alliance analytics dashboard** — a self-hosted Next.js 16 App Router app. The production Docker container runs both Next.js and the scheduled sync worker, with durable state in a bind-mounted SQLite database. Discord gateway operations live in the sibling `darth-protocol` service.
 
 ### Data Flow
 
 ```
-PnW GraphQL API + BK Net REST API
+PnW GraphQL API
         ↓  (every 10 min via sync.ts)
-  Supabase Postgres
+  data/pnw.db (SQLite WAL)
         ↓  (via /api/data?type=...)
   React pages (useQuery → fetchMembers etc.)
+
+pnwdata ← authenticated local HTTP → darth-protocol ← Discord gateway
 ```
 
 **Key insight**: Most pages are purely client-side (`"use client"`) and fetch from `/api/data`. **Exception**: `/api/warTargets`, `/api/conflictStats`, and `/api/beigeWatch` call the PnW GraphQL API directly on each request — these are live-data routes. The server-side sync loop handles all other external API access.
@@ -34,23 +36,23 @@ PnW GraphQL API + BK Net REST API
 
 | File | Role |
 |------|------|
-| `src/lib/supabase.ts` | Server-only Supabase client and shared database lookups |
-| `src/lib/sync.ts` | Fetches PnW + BK Net APIs and writes to Supabase; `startSyncLoop()` runs the main sync every 10 min and recruitment sync daily |
-| `src/lib/sync-request.ts` | Durable manual-sync handoff: Vercel queues a request in `app_config`, then the local worker claims and runs it |
-| `scripts/sync-worker.ts` | Local-only scheduled sync entrypoint, run persistently by `pnwdata-sync.service` (not by Vercel) |
+| `src/lib/db.ts` | Server-only SQLite connection, schema bootstrap, and shared data lookups |
+| `src/lib/sync.ts` | Fetches the PnW API and writes to SQLite; `startSyncLoop()` runs the main sync every 10 min and recruitment sync daily |
+| `src/lib/sync-request.ts` | Durable manual-sync handoff in SQLite; the worker claims and runs queued requests |
+| `scripts/sync-worker.ts` | Scheduled sync entrypoint supervised alongside Next.js by the container entrypoint |
 | `src/lib/pnw.ts` | TypeScript types + `fetchMembers/fetchWars/...` client fetchers (call `/api/data`) |
-| `src/app/api/data/route.ts` | `GET ?type=<table>` — reads Supabase, returns JSON |
+| `src/app/api/data/route.ts` | `GET ?type=<table>` — reads SQLite, returns JSON |
 | `src/app/api/sync/route.ts` | `POST` queues a manual sync for the local worker; `GET` returns status |
-| `src/app/api/warTargets/route.ts` | Calls PnW GraphQL directly; uses Supabase for cached prices and membership lookup |
+| `src/app/api/warTargets/route.ts` | Calls PnW GraphQL directly; uses SQLite for cached prices and membership lookup |
 | `src/app/api/conflictStats/route.ts` | Calls PnW GraphQL directly |
-| `src/app/api/beigeWatch/route.ts` | Calls PnW GraphQL directly; uses Supabase for cached prices |
-| `src/app/api/war-config/route.ts` | GET/POST Supabase-backed war configuration; requires `canManage` (Emperor or `/war-config` role) |
+| `src/app/api/beigeWatch/route.ts` | Calls PnW GraphQL directly; uses SQLite for cached prices |
+| `src/app/api/war-config/route.ts` | GET/POST SQLite-backed war configuration; requires `canManage` (Emperor or `/war-config` role) |
 | `src/lib/session.ts` | JWT session helpers (HS256 via `jose`); reads `SESSION_SECRET` |
-| `src/lib/role-config.ts` | Reads/writes Supabase-backed role configuration; `hasAccess()` checks Discord role IDs |
+| `src/lib/role-config.ts` | Reads/writes SQLite-backed role configuration; `hasAccess()` checks Discord role IDs |
 
 ### Database Tables
 
-Snapshot rows store JSON in a `data JSONB` column alongside an `updated_at BIGINT` (Unix ms timestamp):
+Snapshot rows store JSON text in a `data TEXT` column alongside an `updated_at INTEGER` (Unix ms timestamp):
 
 - `nations` — alliance members (**excludes** APPLICANTs; filtered in sync.ts by `alliance_position !== "APPLICANT"`)
 - `applicants` — nations with `alliance_position === "APPLICANT"`; upserted each sync, fully deleted if none
@@ -58,7 +60,7 @@ Snapshot rows store JSON in a `data JSONB` column alongside an `updated_at BIGIN
 - `bankrecs` — last 500 bank records (upserted)
 - `alliance_meta` — single row (id=1) with alliance stats
 - `trade_prices` — single row (id=1) with 24h average market prices
-- `bknet_members` — member data from BK Net (includes resources, spies, projects, Discord)
+- `discord_nation_links` — nation-to-Discord mappings derived from server nicknames by `darth-protocol`
 - `game_info` — single row (id=1) with radiation levels per continent
 - `sync_status` — single row (id=1) tracking last sync time, status, counts
 
@@ -69,17 +71,17 @@ Snapshot rows store JSON in a `data JSONB` column alongside an `updated_at BIGIN
 - `AppShell` wraps every page (sidebar nav + header with sync status)
 - Charts use Recharts; icons use lucide-react
 - Tailwind dark theme: background `#0f1117`, cards `#161b2e`, borders `#2a3150`
-- **Excel export**: `src/lib/excel.ts` exports `exportToExcel(filename, data[])` using SheetJS (`xlsx`). `src/components/ExportButton.tsx` wraps it as a reusable button — used on every list page.
+- **CSV export**: `src/lib/excel.ts` exports safe, Excel-compatible CSV files. `src/components/ExportButton.tsx` wraps it as a reusable button.
 - **Rules of Hooks**: All `useMemo`/`useCallback` calls must come **before** any conditional early returns (loading/error guards). Violation causes runtime crash on direct URL navigation when TanStack Query cache is cold.
-- **BK Net ID map keys**: Always use `String(m.nation.id)` when building maps and `String(m.id)` when looking up — BK Net IDs arrive as strings at runtime despite TypeScript typing them as `number`.
-- **Nation resource fields**: `money`, `gasoline`, `munitions`, `steel`, `aluminum` are fetched from the PnW GraphQL API and stored in the `nations` table — these reflect stockpile on the nation, not the alliance bank. Do not use BK Net `resources` for these, as BK Net includes alliance account funds.
+- **Discord identity**: `darth-protocol` parses the final bracketed nation ID from each server nickname and snapshots `nation_id`, Discord ID, and username into `discord_nation_links`.
+- **Nation data**: Resources, spies, and project ownership come directly from the PnW GraphQL API.
 
 ### Auth & Access Control
 
-Discord OAuth flow: `/api/auth/discord` → Discord → `/api/auth/callback` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`.
+Discord OAuth flow: `/api/auth/discord` asks the private `darth-protocol` API for the authorization URL → Discord → `/api/auth/callback` sends the code to `darth-protocol` → sets `__session` JWT cookie (7-day, HS256). Session stores `discordId`, `username`, `avatar`, `roleIds[]`, `isEmperor`. Discord client credentials and guild configuration are not pnwdata environment variables.
 
-- `isEmperor`: Discord username matches `DISCORD_ADMIN_ROLE` env var (default `"Emperor"`)
-- Per-page role access is stored in the Supabase `app_config` table; managed via `/role-config` UI
+- `isEmperor`: the user has the role named or identified by `DISCORD_ADMIN_ROLE` (default `"Emperor"`)
+- Per-page role access is stored in the local SQLite `app_config` table; managed via `/role-config` UI
 - `hasAccess(config, pathname, roleIds)` in `src/lib/role-config.ts` is the access check
 
 ### Sidebar Nav Structure
@@ -98,117 +100,71 @@ The sidebar has three tiers:
 
 | Route | Description |
 |-------|-------------|
-| `/` | Landing page with links to War Targets and, for authenticated users, City Build |
+| `/` | Landing page with links to War Targets and, for authenticated users, Raid Finder |
 | `/dashboard` | Alliance overview — member counts, military totals, active wars, top members by score |
-| `/war-targets` | War target finder — fetches live from PnW API using Supabase-backed enemy IDs |
+| `/war-targets` | War target finder — fetches live from PnW API using SQLite-backed enemy IDs |
 | `/conflict` | Conflict stats — damage inflicted/received per alliance/nation for the current war |
 | `/slots` | Need to Declare — members with fewer than N offensive wars, active in last 72h, not in VM |
 | `/members` | Alliance member list with military stats |
 | `/applicants` | Pending applicants sorted by last active |
 | `/military` | Military overview |
 | `/mmr` | MMR Checker — input buildings per city, see who's at max units + spies |
-| `/infra` | Infrastructure & land stats |
 | `/wars` | Active wars |
-| `/bank` | Bank records |
 | `/cashholders` | Stockpile — nations exceeding per-city thresholds for cash, gasoline, munitions, steel, or aluminum (VM nations excluded) |
 | `/charts` | Charts |
 | `/inactive` | Inactive members |
-| `/relink` | Members with no Discord linked in BK Net (needs BK Net sync to be meaningful) |
-| `/optimizer` | City Build Optimizer — authenticated member page |
+| `/relink` | Members whose nation ID is missing from Discord server nicknames |
 | `/explore` | Explore nations |
 | `/command-center` | Per-nation war viewer — select a member to see their active wars with resistance/points/unit counts |
 | `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
+| `/raid-finder` | Local raid target ranking using inactivity, beige loot, GNI snapshots, and visible bank records |
+| `/raid-config` | Admin UI for the minimum raid inactivity threshold |
 | `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
-| `/war-config` | Admin UI to manage enemy/ally alliance IDs in Supabase (canManageRoles only) |
+| `/war-config` | Admin UI to manage enemy/ally alliance IDs in SQLite (canManageRoles only) |
 
 ### External APIs
 
 - **PnW GraphQL**: `https://api.politicsandwar.com/graphql?api_key=PNW_API_KEY`
   - Pagination uses `first:` argument (not `limit:`)
   - `alliance_id` from GraphQL returns as **string** — wrap with `Number()` before using as `[Int]`
-- **BK Net REST**: `https://bkpw.net/api/v1` with `Authorization: Bearer BKNET_API_TOKEN`
-  - Nation IDs are numbers; use `String(m.nation.id)` as map keys
-  - Projects at `m.nation.projects` (`Record<string, boolean>`)
-  - Discord at `m.discord?.account?.discord_username`
 
 ### Environment Variables
 
 ```
 PNW_API_KEY=           # Politics and War API key
-BKNET_API_TOKEN=       # BK Net API token (optional; BK Net features disabled if absent)
+PUBLIC_APP_URL=        # Browser-facing origin used for authentication redirects
 SESSION_SECRET=        # JWT signing secret, min 32 chars
-DISCORD_CLIENT_ID=     # Discord OAuth app client ID
-DISCORD_CLIENT_SECRET= # Discord OAuth app client secret
-DISCORD_REDIRECT_URI=  # Full callback URL, e.g. https://example.com/api/auth/callback
-DISCORD_GUILD_ID=      # Discord server ID for member/role lookup
-DISCORD_ADMIN_ROLE=    # Username that grants isEmperor (default: "Emperor")
-DISCORD_BOT_TOKEN=     # Discord bot token for bot.js
+BOT_SERVICE_TOKEN=     # Shared bearer token for pnwdata <-> darth-protocol
+DARTH_PROTOCOL_URL=    # Private darth-protocol HTTP endpoint
+PNW_DB_PATH=           # SQLite path (defaults to data/pnw.db)
 ```
 
 ### Key Config
 
-- Server database access requires `SUPABASE_URL` and `SUPABASE_SECRET_KEY`; never expose the secret key through a `NEXT_PUBLIC_` variable
-- Supabase `app_config` row `role-config` maps page paths to allowed Discord role ID arrays; manage it via `/role-config`
-- Supabase `app_config` row `war-config` stores runtime war configuration; manage it via `/war-config`:
+- SQLite `app_config` row `role-config` maps page paths to allowed Discord role ID arrays; manage it via `/role-config`
+- SQLite `app_config` row `war-config` stores runtime war configuration; manage it via `/war-config`:
   - `enemy_alliance_ids: number[]` — enemy alliance IDs; fetched live by `/api/warTargets` and `/api/conflictStats`
   - `ally_alliance_ids: number[]` — ally alliance IDs; used by `/api/conflictStats` to label each coalition side
+- SQLite `app_config` row `raid-finder-config` stores the minimum inactive days; manage it via `/raid-config`
 
-### Discord Bot
+### Discord Bot Boundary
 
-`bot.js` is a standalone Discord.js v14 bot — separate from the Next.js app, not imported by it.
-
-```bash
-node bot.js          # Start the bot
-nohup node bot.js > /tmp/bot.log 2>&1 &   # Start in background
-```
-
-To restart: `kill -9 $(ps aux | grep "node bot.js" | grep -v grep | awk '{print $2}')` then start again (`pkill` exits 144 and the process survives).
-
-- Reads `.env.local` manually (no dotenv dependency) — shares the same env file as the Next.js app
-- Queries Supabase using the server-only secret key
-- Registers `/targets` as a **guild slash command** on startup (instant, uses `DISCORD_GUILD_ID`) — requires the `interactionCreate` handler
-- `/targets` looks up the caller's Discord username in Supabase, calls `http://localhost:3000/api/warTargets`, and returns the top 5 targets (highest avg infra / lowest soldiers) as embeds with declare-war link buttons
-- Message triggers (via `messageCreate` + `MessageContent` privileged intent): `ayy`, `hail`, `grok` mentions, `summarize/summarise this`, `ayylah give me wisdom`, `ayylah grant me a wish`
-- **MessageContent is a privileged intent** — must be enabled in Discord Developer Portal → Bot → Privileged Gateway Intents
+The Discord client is owned by `../darth-protocol`; this repository must not contain or launch a gateway bot. Website routes use `src/lib/darth-protocol.ts` for guild member/role lookups and nation-ID-addressed DMs. Darth Protocol parses nation IDs from member nicknames and calls bearer-protected `/api/bot/*` routes to refresh those links and claim stockpile alerts. Both processes must use the same `BOT_SERVICE_TOKEN`.
 
 ### Deployment Notes
 
-- The app runs in **production mode** (`next start`), not dev mode
-- After any code change: `npm run build` then restart the server:
-  ```bash
-  kill -9 $(ss -tlnp | grep ':3000' | grep -oP 'pid=\K[0-9]+')
-  nohup npm run start > /tmp/nextjs.log 2>&1 &
-  sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
-  ```
-- `pkill -f "next start"` is unreliable (exits 144, process survives) — always use the `ss`/`kill -9` approach above
-- **Stale chunk pitfall**: static pages are prerendered with JS chunk hashes baked into the HTML. If the old server process keeps running after a rebuild, it serves HTML referencing chunks that no longer exist, causing 500s on chunk fetches and a frozen "Loading…" UI. Always confirm the old process is dead before starting the new one.
+- Production is deployed with `docker compose up -d --build`.
+- `docker-entrypoint.sh` supervises `next start` and the sync worker; if either exits, the container exits and Docker restarts the unit.
+- `./data` is bind-mounted at `/app/data`; never bake the SQLite database into the image.
+- Verify a deployment with `docker compose ps`, `docker compose logs`, and `curl --fail http://127.0.0.1:3000/api/health`.
+- Put a TLS reverse proxy in front of the Next.js port for public deployments.
 
-### BK Net Resilience
+<!-- BEGIN:nextjs-agent-rules -->
 
-- BK Net is fetched **separately** from the PnW `Promise.all` in `sync.ts`, with `.catch()` so a BK Net outage never fails the whole sync
-- If BK Net is down: logs `[PnW Sync] BK Net unavailable, skipping: <reason>` and continues with stale BK Net data; retries next cycle
+# This is NOT the Next.js you know
 
-### PnW Game Formulas (used in optimizer page)
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
-- **Slots**: `floor(infra / 50)`
-- **Nuclear power**: 1 plant per `ceil(infra / 2000)` slots; $10,500/day per plant; uranium usage is `infra / 1000 × 3` per day
-- **Disease rate**: density, infrastructure, pollution, and hospitals all contribute; pollution adds `pollution × 0.05` percentage points
-  - Hospitals reduce disease by 2.5 points, or 3.5 with Clinical Research Center
-- **Crime rate**: `((103 − commerce)² + infra × 100) / 111111 − police reduction`
-- **Population**: applies disease/crime losses to `infra × 100`, then multiplies by the city-age bonus `1 + ln(ageDays) / 15`
-- **Commerce income**: `((commerce% / 50) × 0.725 + 0.725) × effectivePopulation` per day (do not multiply by 12)
-  - Open Markets applies 1%, 1.5% with Government Support Agency, or 1.75% with GSA + Bureau of Domestic Affairs
-- **Max commerce**: 100% base, 115% with ITC project, 125% with ITC + Telecom Sat
-- **Base commerce projects**: ITC +1, Telecommunications Satellite +2, Specialized Police Training +4
-- **Commerce buildings** (per city): Stadium +12% (max 3), Shopping Mall +9% (max **5**), Subway +8% (max 1), Bank +5% (max **6**), Supermarket +3% (max 6)
-- **Farm food/day**: `(land / 400) × 12` with Mass Irrigation, `(land / 500) × 12` without; then apply specialization, season, and combined global + continent radiation
-- **Food consumption**: civilian population consumes `population / 500` food per day and must be deducted from farm output
-- **Steel Mill**: 9 steel/day from 3 iron + 3 coal, $4,000/day op cost, max 5/city
-- **Aluminum Refinery**: 9 aluminum/day from 3 bauxite, $2,500/day, max 5/city
-- **Munitions Factory**: 18 munitions/day from 6 lead, $4,000/day, max 5/city
-- **Oil Refinery**: 6 gasoline/day from 3 oil, $4,000/day, max 5/city
-- **Production specialization/projects**: maxed production buildings receive a 1.5× specialization bonus; Iron/Bauxite Works, Arms Stockpile, EGR, UEP, and Green Technologies modify output, inputs, pollution, or upkeep
-- **Military buildings** (consume slots, no income): Barracks $3,000/day (max 5), War Factories $3,000/day (max 5), Hangars $1,000/day (max 5), Dockyards $2,500/day (max 3)
-- **Civil buildings** (consume slots, reduce disease/crime/pollution): Hospitals $1,000/day (max 5), Police Stations $750/day (max 5), Recycling Centers $2,500/day (max 3)
-- **MMR unit caps**: Soldiers = barracks×3000×cities, Tanks = factories×250×cities, Aircraft = hangars×15×cities, Ships = dockyards×5×cities
-- **Spy caps**: 60 with Intelligence Agency project, 50 without; training rate 2/day
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

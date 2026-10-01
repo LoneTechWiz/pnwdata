@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { fetchApplicants, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved } from "@/lib/pnw";
+import { fetchApplicants, fetchDiscordLinks, fetchSyncStatus } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -19,30 +19,14 @@ export default function ApplicantsPage() {
     queryFn: fetchApplicants,
     refetchInterval: 10 * 60 * 1000,
   });
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
-  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
+  const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
   if (applicants.length === 0 && (status?.status === "never" || status?.status === "syncing")) {
     return <AppShell><SyncingPlaceholder /></AppShell>;
   }
-
-  const bknetDiscord = new Map(
-    bknetMembers
-      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
-      .map(m => {
-        const id = m.discord?.account?.discord_id;
-        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
-        return [String(m.nation.id), name] as [string, string];
-      })
-      .filter(([, name]) => name)
-  );
 
   const sorted = [...applicants].sort((a, b) =>
     new Date(b.last_active).getTime() - new Date(a.last_active).getTime()
@@ -63,7 +47,7 @@ export default function ApplicantsPage() {
             getData={() => sorted.map(m => ({
               Nation: m.nation_name,
               Leader: m.leader_name,
-              Discord: bknetDiscord.get(String(m.id)) ?? "",
+              Discord: discordLinks[String(m.id)]?.username ?? "",
               Score: m.score,
               Cities: m.num_cities,
               Color: m.color,
@@ -118,8 +102,8 @@ export default function ApplicantsPage() {
                         {m.nation_name}
                       </a>
                       <div className="text-xs text-slate-500">{m.leader_name}</div>
-                      {bknetDiscord.has(String(m.id)) && (
-                        <div className="text-xs text-indigo-400">{bknetDiscord.get(String(m.id))}</div>
+                      {discordLinks[String(m.id)] && (
+                        <div className="text-xs text-indigo-400">{discordLinks[String(m.id)].username}</div>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right text-blue-300 tabular-nums">{Number(m.score).toLocaleString()}</td>

@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved, Nation } from "@/lib/pnw";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus, Nation } from "@/lib/pnw";
 import { ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
@@ -61,24 +61,8 @@ export default function CashHoldersPage() {
     queryFn: fetchMembers,
     refetchInterval: 10 * 60 * 1000,
   });
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
+  const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
-  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
-
-  const bknetDiscord = useMemo(() => new Map(
-    bknetMembers
-      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
-      .map(m => {
-        const id = m.discord?.account?.discord_id;
-        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
-        return [String(m.nation.id), name] as [string, string];
-      })
-      .filter(([, name]) => name)
-  ), [bknetMembers, discordResolved]);
 
   const filtered = useMemo(() => {
     const active = RESOURCES.filter(r => {
@@ -144,7 +128,7 @@ export default function CashHoldersPage() {
             getData={() => filtered.map(m => ({
               Nation: m.nation_name,
               Leader: m.leader_name,
-              Discord: bknetDiscord.get(String(m.id)) ?? "",
+              Discord: discordLinks[String(m.id)]?.username ?? "",
               Cities: m.num_cities,
               Safe: isSafe(m) ? "Safe" : "Not Safe",
               Cash: m.money ?? 0,
@@ -167,7 +151,7 @@ export default function CashHoldersPage() {
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
                 <tr className="border-b border-[#2a3150]">
-                  {(["nation_name", "num_cities", "safe", ...RESOURCES.map(r => r.key)] as SortKey[]).map((key, i) => {
+                  {(["nation_name", "num_cities", "safe", ...RESOURCES.map(r => r.key)] as SortKey[]).map((key) => {
                     const res = RESOURCES.find(r => r.key === key);
                     const label = key === "nation_name" ? "Nation" : key === "num_cities" ? "Cities" : key === "safe" ? "Safe?" : res!.label;
                     const color = key === "safe" ? "text-green-400" : res ? res.color : "text-slate-400";
@@ -202,8 +186,8 @@ export default function CashHoldersPage() {
                         {m.nation_name}
                       </a>
                       <div className="text-xs text-slate-500">{m.leader_name}</div>
-                      {bknetDiscord.has(String(m.id)) && (
-                        <div className="text-xs text-indigo-400">{bknetDiscord.get(String(m.id))}</div>
+                      {discordLinks[String(m.id)] && (
+                        <div className="text-xs text-indigo-400">{discordLinks[String(m.id)].username}</div>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.num_cities}</td>

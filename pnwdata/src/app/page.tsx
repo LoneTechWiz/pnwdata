@@ -18,7 +18,7 @@ export default function HomePage() {
       <div className="text-center space-y-6 px-6">
         <div className="flex items-center justify-center gap-3 mb-2">
           <Shield size={40} className="text-blue-400" />
-          <h1 className="text-4xl font-bold text-white">BK Analytics</h1>
+          <h1 className="text-4xl font-bold text-white">The Empire Analytics</h1>
         </div>
         <p className="text-slate-400 text-lg max-w-md mx-auto">
           Alliance intelligence dashboard for Politics &amp; War.
@@ -51,10 +51,10 @@ export default function HomePage() {
           </Link>
           {isLoggedIn && (
             <Link
-              href="/optimizer"
+              href="/raid-finder"
               className="px-5 py-2.5 bg-[#161b2e] hover:bg-[#1e2540] border border-[#2a3150] text-slate-300 rounded-lg text-sm font-medium transition-colors"
             >
-              City Build
+              Raid Finder
             </Link>
           )}
         </div>

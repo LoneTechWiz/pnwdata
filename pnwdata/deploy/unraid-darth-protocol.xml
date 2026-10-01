@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>darth-protocol</Name>
+  <Repository>darth-protocol:unraid</Repository>
+  <Registry/>
+  <Network>pnw-stack</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>Discord trade alerts and gateway services for the local pnwdata website.</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3100]/health</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>0</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>The pnwdata container must use the pnw-stack network and the same BOT_SERVICE_TOKEN.</Requires>
+  <Config Name="Bot API Port" Target="3100" Default="3100" Mode="tcp" Description="Private bot HTTP API and health endpoint" Type="Port" Display="always" Required="true" Mask="false">3100</Config>
+  <Config Name="Bot State" Target="/app/data" Default="/mnt/user/appdata/darth-protocol/data" Mode="rw" Description="Persistent trade registrations and alert state" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/darth-protocol/data</Config>
+  <Config Name="Discord Bot Token" Target="DISCORD_TOKEN" Default="" Mode="" Description="Discord bot token" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Discord Client ID" Target="DISCORD_CLIENT_ID" Default="" Mode="" Description="Discord application ID" Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Discord Client Secret" Target="DISCORD_CLIENT_SECRET" Default="" Mode="" Description="Discord OAuth client secret used for pnwdata login" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Discord Redirect URI" Target="DISCORD_REDIRECT_URI" Default="https://pnwdata.lonetechwiz.com/api/auth/callback" Mode="" Description="Registered pnwdata OAuth callback" Type="Variable" Display="always" Required="true" Mask="false">https://pnwdata.lonetechwiz.com/api/auth/callback</Config>
+  <Config Name="Discord Guild ID" Target="DISCORD_GUILD_ID" Default="" Mode="" Description="Primary Discord server ID" Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Discord Admin Role" Target="DISCORD_ADMIN_ROLE" Default="Emperor" Mode="" Description="Role name or ID that grants website administration" Type="Variable" Display="always" Required="true" Mask="false">Emperor</Config>
+  <Config Name="P&amp;W API Key" Target="PNW_API_KEY" Default="" Mode="" Description="Politics &amp; War API key used for trade scans" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Shared Bot Service Token" Target="BOT_SERVICE_TOKEN" Default="" Mode="" Description="Must exactly match pnwdata" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="pnwdata URL" Target="PNWDATA_URL" Default="http://pnwdata:3000" Mode="" Description="Private Docker-network pnwdata URL" Type="Variable" Display="advanced" Required="true" Mask="false">http://pnwdata:3000</Config>
+  <Config Name="Bot API Host" Target="BOT_API_HOST" Default="0.0.0.0" Mode="" Description="Listen address inside the container" Type="Variable" Display="advanced" Required="true" Mask="false">0.0.0.0</Config>
+  <Config Name="Bot API Internal Port" Target="BOT_API_PORT" Default="3100" Mode="" Description="Listen port inside the container" Type="Variable" Display="advanced" Required="true" Mask="false">3100</Config>
+  <Config Name="Targets Channel ID" Target="TARGETS_CHANNEL_ID" Default="" Mode="" Description="Optional channel restriction for /targets" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Trade Scan Interval" Target="SCAN_INTERVAL_SECONDS" Default="300" Mode="" Description="Default scan interval in seconds, minimum 60" Type="Variable" Display="advanced" Required="true" Mask="false">300</Config>
+</Container>

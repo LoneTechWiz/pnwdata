@@ -11,6 +11,11 @@ export interface SessionPayload {
   isEmperor: boolean;
 }
 
+export interface VerifiedSessionPayload extends SessionPayload {
+  iat: number;
+  exp: number;
+}
+
 export const SESSION_COOKIE = "__session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
 
@@ -40,10 +45,10 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
 }
 
 /** Verifies a raw JWT token string and returns the payload, or null if invalid. */
-export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
+export async function verifySessionToken(token: string): Promise<VerifiedSessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getKey());
-    return payload as unknown as SessionPayload;
+    return payload as unknown as VerifiedSessionPayload;
   } catch {
     return null;
   }
@@ -53,7 +58,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
  * Reads the session from the request (middleware/route handlers with NextRequest)
  * or from next/headers cookies() (server components / route handlers without req).
  */
-export async function getSession(req?: NextRequest): Promise<SessionPayload | null> {
+export async function getSession(req?: NextRequest): Promise<VerifiedSessionPayload | null> {
   let token: string | undefined;
   if (req) {
     token = req.cookies.get(SESSION_COOKIE)?.value;

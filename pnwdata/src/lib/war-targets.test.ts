@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attackLootValue,
+  attackLootBreakdown,
   avgInfraPerCity,
   beigeAverage,
   recordBeigeLoss,
@@ -52,6 +53,18 @@ describe("attackLootValue", () => {
   it("values resources using trade prices", () => {
     const attacks = [{ ...emptyAttack(), money_looted: 10, coal_looted: 2 }];
     expect(attackLootValue(attacks, prices)).toBe(12);
+  });
+
+  it("splits victory nation loot from alliance-bank loot", () => {
+    const attacks = [
+      { ...emptyAttack(), type: "VICTORY", money_looted: 100, coal_looted: 2 },
+      { ...emptyAttack(), type: "ALLIANCELOOT", money_looted: 300, oil_looted: 4 },
+      { ...emptyAttack(), type: "GROUND", money_looted: 999 },
+    ];
+    expect(attackLootBreakdown(attacks, prices)).toEqual({
+      nationLoot: 102,
+      allianceLoot: 308,
+    });
   });
 });
 

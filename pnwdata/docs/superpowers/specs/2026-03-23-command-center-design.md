@@ -2,7 +2,7 @@
 
 ## Overview
 
-A hidden, password-protected page at `/command-center` that replicates the "Command Center" tab from the BK Milcom Google Sheet. It shows a per-nation war dashboard: select any alliance member from a dropdown, and see all their active wars with full military context for both sides.
+A hidden, password-protected page at `/command-center` that replicates the "Command Center" tab from the MPR Milcom Google Sheet. It shows a per-nation war dashboard: select any alliance member from a dropdown, and see all their active wars with full military context for both sides.
 
 ## Route & Navigation
 
@@ -21,7 +21,7 @@ Three `useQuery` calls, all with `refetchInterval: 10 * 60 * 1000`:
 ## UI Layout
 
 ### Header
-- Page title: **"BLACK KNIGHTS COMMAND CENTER"** (styled prominently)
+- Page title: **"THE EMPIRE COMMAND CENTER"** (styled prominently)
 - Sync timestamp line: "Last synced: <time>" using `status.last_synced_at`, matching the pattern used in other pages
 
 ### Nation Selector
@@ -59,14 +59,14 @@ warType      = war.war_type  // "RAID" | "ATTRITION" | "ORDINARY"
 | Column | Source | Notes |
 |--------|--------|-------|
 | Opponent | `opponent?.nation_name ?? \`Nation #${opponentId}\`` | Linked to `https://politicsandwar.com/nation/id=${opponentId}` |
-| BK Res | `bkRes` | Pink cell background when `bkRes < oppRes` |
+| MPR Res | `bkRes` | Pink cell background when `bkRes < oppRes` |
 | Opp Res | `oppRes` | — |
 | Our Pts | `ourPts` | Pink cell background when `ourPts === 0` |
 | Their Pts | `theirPts` | — |
-| BK Sol | `selectedNation.soldiers` | Live from latest sync; same value across all rows |
-| BK Tank | `selectedNation.tanks` | Same value across all rows |
-| BK Air | `selectedNation.aircraft` | Same value across all rows |
-| BK Ship | `selectedNation.ships` | Same value across all rows |
+| MPR Sol | `selectedNation.soldiers` | Live from latest sync; same value across all rows |
+| MPR Tank | `selectedNation.tanks` | Same value across all rows |
+| MPR Air | `selectedNation.aircraft` | Same value across all rows |
+| MPR Ship | `selectedNation.ships` | Same value across all rows |
 | Opp Sol | `opponent?.soldiers ?? 0` | Snapshotted at war declaration time (not live) |
 | Opp Tank | `opponent?.tanks ?? 0` | Same caveat |
 | Opp Air | `opponent?.aircraft ?? 0` | Same caveat |
@@ -74,10 +74,10 @@ warType      = war.war_type  // "RAID" | "ATTRITION" | "ORDINARY"
 | Off/Def | `offDef` | — |
 | War Type | `warType` | — |
 
-> **Note:** Opponent military stats (`opponent.soldiers` etc.) come from the embedded `attacker`/`defender` snapshot in the War record — these reflect troop levels at war declaration, not current. BK military stats come from the live `Nation` object and are current.
+> **Note:** Opponent military stats (`opponent.soldiers` etc.) come from the embedded `attacker`/`defender` snapshot in the War record — these reflect troop levels at war declaration, not current. MPR military stats come from the live `Nation` object and are current.
 
 **Color highlighting (matching the sheet):**
-- `bkRes < oppRes` → pink background on the **BK Res** cell
+- `bkRes < oppRes` → pink background on the **MPR Res** cell
 - `ourPts === 0` → pink background on the **Our Pts** cell
 
 **Empty state:** If the selected nation has no active wars, show a centered "No active wars" message inside the table area.

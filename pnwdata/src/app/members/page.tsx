@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus, fetchDiscordResolved, Nation } from "@/lib/pnw";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus, Nation } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -22,6 +22,27 @@ function timeSince(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function SortableHeader({
+  label,
+  field,
+  sortKey,
+  onSort,
+}: {
+  label: string;
+  field: SortKey;
+  sortKey: SortKey;
+  onSort: (field: SortKey) => void;
+}) {
+  const active = sortKey === field;
+  return (
+    <th className="px-3 py-3 text-right cursor-pointer select-none group" onClick={() => onSort(field)}>
+      <span className={`flex items-center justify-end gap-1 text-xs font-medium ${active ? "text-blue-400" : "text-slate-400 group-hover:text-slate-200"}`}>
+        {label}<ArrowUpDown size={10} className={active ? "opacity-100" : "opacity-30"} />
+      </span>
+    </th>
+  );
+}
+
 export default function MembersPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("score");
@@ -37,28 +58,8 @@ export default function MembersPage() {
     refetchInterval: 10 * 60 * 1000,
   });
 
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
+  const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
-  const { data: discordResolved = {} } = useQuery({ queryKey: ["discordResolved"], queryFn: fetchDiscordResolved, staleTime: Infinity });
-
-  const bknetDiscord = new Map(
-    bknetMembers
-      .filter(m => m.discord?.account?.discord_id || m.discord?.account?.discord_username)
-      .map(m => {
-        const id = m.discord?.account?.discord_id;
-        const name = (id && discordResolved[id]) || m.discord?.account?.discord_username || "";
-        return [String(m.nation.id), name] as [string, string];
-      })
-      .filter(([, name]) => name)
-  );
-
-  const bknetSpies = new Map(
-    bknetMembers.map(m => [String(m.nation.id), m.nation.military.spies])
-  );
 
   function handleSort(key: SortKey) {
     if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -69,7 +70,7 @@ export default function MembersPage() {
     .filter(m => showVm || m.vacation_mode_turns === 0)
     .filter(m => !showBeigeOnly || m.beige_turns > 0)
     .filter(m => {
-      const s = bknetSpies.get(String(m.id)) ?? null;
+      const s = m.spies ?? null;
       if (minSpies !== "" && (s === null || s < Number(minSpies))) return false;
       if (maxSpies !== "" && (s === null || s > Number(maxSpies))) return false;
       return true;
@@ -79,26 +80,15 @@ export default function MembersPage() {
       return (
         m.nation_name.toLowerCase().includes(q) ||
         m.leader_name.toLowerCase().includes(q) ||
-        (bknetDiscord.get(String(m.id)) ?? "").toLowerCase().includes(q)
+        (discordLinks[String(m.id)]?.username ?? "").toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
-      const av = sortKey === "spies" ? (bknetSpies.get(String(a.id)) ?? -1) : a[sortKey] as number | string;
-      const bv = sortKey === "spies" ? (bknetSpies.get(String(b.id)) ?? -1) : b[sortKey] as number | string;
+      const av = sortKey === "spies" ? (a.spies ?? -1) : a[sortKey] as number | string;
+      const bv = sortKey === "spies" ? (b.spies ?? -1) : b[sortKey] as number | string;
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
-
-  function Th({ label, field }: { label: string; field: SortKey }) {
-    const active = sortKey === field;
-    return (
-      <th className="px-3 py-3 text-right cursor-pointer select-none group" onClick={() => handleSort(field)}>
-        <span className={`flex items-center justify-end gap-1 text-xs font-medium ${active ? "text-blue-400" : "text-slate-400 group-hover:text-slate-200"}`}>
-          {label}<ArrowUpDown size={10} className={active ? "opacity-100" : "opacity-30"} />
-        </span>
-      </th>
-    );
-  }
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
@@ -120,7 +110,7 @@ export default function MembersPage() {
               getData={() => filtered.map(m => ({
                 Nation: m.nation_name,
                 Leader: m.leader_name,
-                Discord: bknetDiscord.get(String(m.id)) ?? "",
+                Discord: discordLinks[String(m.id)]?.username ?? "",
                 Position: m.alliance_position,
                 Score: m.score,
                 Cities: m.num_cities,
@@ -130,7 +120,7 @@ export default function MembersPage() {
                 Ships: m.ships,
                 Missiles: m.missiles,
                 Nukes: m.nukes,
-                Spies: bknetSpies.get(String(m.id)) ?? "",
+                Spies: m.spies ?? "",
                 "Off Wars": m.offensive_wars_count,
                 "Def Wars": m.defensive_wars_count,
                 "Last Active": m.last_active,
@@ -182,18 +172,18 @@ export default function MembersPage() {
                 <th className="text-left px-3 py-3 text-xs font-medium text-slate-400 cursor-pointer" onClick={() => handleSort("nation_name")}>
                   <span className="flex items-center gap-1">Nation <ArrowUpDown size={10} /></span>
                 </th>
-                <Th label="Score" field="score" />
-                <Th label="Cities" field="num_cities" />
-                <Th label="Soldiers" field="soldiers" />
-                <Th label="Tanks" field="tanks" />
-                <Th label="Aircraft" field="aircraft" />
-                <Th label="Ships" field="ships" />
-                <Th label="Missiles" field="missiles" />
-                <Th label="Nukes" field="nukes" />
-                <Th label="Spies" field="spies" />
-                <Th label="Off Wars" field="offensive_wars_count" />
-                <Th label="Def Wars" field="defensive_wars_count" />
-                <Th label="Beige Turns" field="beige_turns" />
+                <SortableHeader label="Score" field="score" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Cities" field="num_cities" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Soldiers" field="soldiers" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Tanks" field="tanks" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Aircraft" field="aircraft" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Ships" field="ships" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Missiles" field="missiles" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Nukes" field="nukes" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Spies" field="spies" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Off Wars" field="offensive_wars_count" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Def Wars" field="defensive_wars_count" sortKey={sortKey} onSort={handleSort} />
+                <SortableHeader label="Beige Turns" field="beige_turns" sortKey={sortKey} onSort={handleSort} />
                 <th className="px-3 py-3 text-right text-xs font-medium text-slate-400">Last Active</th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-slate-400">Status</th>
               </tr>
@@ -208,8 +198,8 @@ export default function MembersPage() {
                       <a href={`https://politicsandwar.com/nation/id=${m.id}`} target="_blank" rel="noopener noreferrer"
                         className="text-white font-medium hover:text-blue-400 transition-colors block">{m.nation_name}</a>
                       <div className="text-xs text-slate-500">{m.leader_name} · {POSITIONS[m.alliance_position] ?? m.alliance_position}</div>
-                      {bknetDiscord.has(String(m.id)) && (
-                        <div className="text-xs text-indigo-400">{bknetDiscord.get(String(m.id))}</div>
+                      {discordLinks[String(m.id)] && (
+                        <div className="text-xs text-indigo-400">{discordLinks[String(m.id)].username}</div>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right text-blue-300">{Number(m.score).toLocaleString()}</td>
@@ -221,7 +211,7 @@ export default function MembersPage() {
                     <td className="px-3 py-2.5 text-right text-red-400">{m.missiles}</td>
                     <td className="px-3 py-2.5 text-right text-purple-400">{m.nukes}</td>
                     <td className="px-3 py-2.5 text-right text-yellow-400">
-                      {bknetSpies.has(String(m.id)) ? bknetSpies.get(String(m.id)) : <span className="text-slate-600">—</span>}
+                      {m.spies != null ? m.spies : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.offensive_wars_count}</td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.defensive_wars_count}</td>

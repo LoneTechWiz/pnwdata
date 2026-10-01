@@ -16,6 +16,7 @@ export interface Nation {
   ships: number;
   missiles: number;
   nukes: number;
+  spies?: number;
   vacation_mode_turns: number;
   beige_turns: number;
   alliance_position: string;
@@ -41,6 +42,21 @@ export interface Nation {
   international_trade_center?: boolean;
   telecommunications_satellite?: boolean;
   uranium_enrichment_program?: boolean;
+  iron_works?: boolean;
+  bauxite_works?: boolean;
+  arms_stockpile?: boolean;
+  emergency_gasoline_reserve?: boolean;
+  green_technologies?: boolean;
+  clinical_research_center?: boolean;
+  specialized_police_training_program?: boolean;
+  recycling_initiative?: boolean;
+  fallout_shelter?: boolean;
+  government_support_agency?: boolean;
+  bureau_of_domestic_affairs?: boolean;
+  central_intelligence_agency?: boolean;
+  center_for_civil_engineering?: boolean;
+  advanced_engineering_corps?: boolean;
+  arable_land_agency?: boolean;
   cities?: {
     date?: string;
     powered?: boolean;
@@ -142,6 +158,11 @@ export interface SyncStatus {
   bankrec_count: number;
 }
 
+export interface DiscordNationLink {
+  discordId: string;
+  username: string;
+}
+
 // ---- Client-side fetchers (read from local DB via API) ----
 
 async function apiFetch<T>(type: string): Promise<T> {
@@ -150,52 +171,6 @@ async function apiFetch<T>(type: string): Promise<T> {
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.includes("application/json")) throw new Error(`Unexpected response for ${type}`);
   return res.json();
-}
-
-export interface BknetResources {
-  money: number;
-  coal: number;
-  oil: number;
-  uranium: number;
-  iron: number;
-  bauxite: number;
-  lead: number;
-  gasoline: number;
-  munitions: number;
-  steel: number;
-  aluminum: number;
-  food: number;
-  credits: number;
-}
-
-export interface BknetMember {
-  nation: {
-    id: number;
-    nation_name: string;
-    leader_name: string;
-    discord: string;
-    discord_id: string;
-    num_cities: number;
-    score: number;
-    vacation_mode_turns: number;
-    alliance_position: string;
-    resources: BknetResources;
-    military: {
-      soldiers: number;
-      tanks: number;
-      aircraft: number;
-      ships: number;
-      missiles: number;
-      nukes: number;
-      spies: number;
-    };
-    projects: Record<string, boolean>;
-  };
-  discord: {
-    nation_handle: string;
-    nation_discord_id: string;
-    account: { discord_id: string; discord_username: string } | null;
-  } | null;
 }
 
 export interface TradePrice {
@@ -233,8 +208,7 @@ export const fetchApplicants = (): Promise<Nation[]> => apiFetch("applicants");
 export const fetchWars = (): Promise<War[]> => apiFetch("wars");
 export const fetchBankrecs = (): Promise<BankRec[]> => apiFetch("bankrecs");
 export const fetchAlliance = (): Promise<Alliance | null> => apiFetch("alliance");
-export const fetchBknetMembers = (): Promise<BknetMember[]> => apiFetch("bknet_members");
 export const fetchSyncStatus = (): Promise<SyncStatus> => apiFetch("status");
 export const fetchTradePrices = (): Promise<TradePrice | null> => apiFetch("trade_prices");
 export const fetchGameInfo = (): Promise<GameInfo | null> => apiFetch("game_info");
-export const fetchDiscordResolved = (): Promise<Record<string, string>> => apiFetch("discord_resolved");
+export const fetchDiscordLinks = (): Promise<Record<string, DiscordNationLink>> => apiFetch("discord_links");

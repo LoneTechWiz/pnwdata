@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchMembers, fetchWars, fetchSyncStatus, fetchBknetMembers, Nation, War } from "@/lib/pnw";
+import { fetchMembers, fetchWars, fetchSyncStatus, Nation, War } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -33,12 +33,6 @@ export default function CommandCenterPage() {
     refetchInterval: 15_000,
   });
 
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
-
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [minSpies, setMinSpies] = useState("");
   const [maxSpies, setMaxSpies] = useState("");
@@ -53,28 +47,26 @@ export default function CommandCenterPage() {
     });
   }
 
-  const bknetSpies = useMemo(
-    () => new Map(bknetMembers.map(m => [String(m.nation.id), m.nation.military.spies])),
-    [bknetMembers]
-  );
-
   const sortedMembers = useMemo(() => {
     const min = minSpies !== "" ? Number(minSpies) : null;
     const max = maxSpies !== "" ? Number(maxSpies) : null;
     return [...members]
       .filter((m) => m.vacation_mode_turns === 0)
       .filter((m) => {
-        const s = bknetSpies.get(String(m.id)) ?? null;
+        const s = m.spies ?? null;
         if (min !== null && (s === null || s < min)) return false;
         if (max !== null && (s === null || s > max)) return false;
         return true;
       })
       .sort((a, b) => a.nation_name.localeCompare(b.nation_name));
-  }, [members, minSpies, maxSpies, bknetSpies]);
+  }, [members, minSpies, maxSpies]);
 
+  const effectiveSelectedId = selectedId && sortedMembers.some((member) => String(member.id) === selectedId)
+    ? selectedId
+    : sortedMembers[0] ? String(sortedMembers[0].id) : null;
   const selectedNation: Nation | undefined = useMemo(
-    () => sortedMembers.find((m) => String(m.id) === selectedId),
-    [sortedMembers, selectedId]
+    () => sortedMembers.find((m) => String(m.id) === effectiveSelectedId),
+    [sortedMembers, effectiveSelectedId]
   );
 
   const activeWars = useMemo(() => {
@@ -94,7 +86,7 @@ export default function CommandCenterPage() {
       if (war.naval_blockade === 0) continue;
       const isAttacker = war.att_id === nid;
       const opponentId = isAttacker ? war.def_id : war.att_id;
-      // blockade is active against BK nation if the opponent is the one performing it
+      // blockade is active against the MPR nation if the opponent is the one performing it
       if (war.naval_blockade === opponentId) {
         const opponentName = isAttacker
           ? (war.defender?.nation_name ?? `Nation #${opponentId}`)
@@ -104,12 +96,6 @@ export default function CommandCenterPage() {
     }
     return result;
   }, [activeWars, selectedNation]);
-
-  useEffect(() => {
-    if (selectedId === null && sortedMembers.length > 0) {
-      setSelectedId(String(sortedMembers[0].id));
-    }
-  }, [sortedMembers, selectedId]);
 
   const isLoading = mLoading || wLoading;
   const error = mErr || wErr;
@@ -130,7 +116,7 @@ export default function CommandCenterPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-white tracking-wide">
-            BLACK KNIGHTS COMMAND CENTER
+            THE EMPIRE COMMAND CENTER
           </h1>
           <p className="text-xs text-slate-400 mt-1">Last synced: {lastSynced}</p>
         </div>
@@ -142,7 +128,7 @@ export default function CommandCenterPage() {
           </label>
           <select
             id="nation-select"
-            value={selectedId ?? ""}
+            value={effectiveSelectedId ?? ""}
             onChange={(e) => setSelectedId(e.target.value)}
             className="bg-[#0f1117] border border-[#2a3150] rounded-lg text-white px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
           >
@@ -162,9 +148,9 @@ export default function CommandCenterPage() {
               {selectedNation.nation_name} ↗
             </a>
           )}
-          {selectedNation && bknetSpies.has(String(selectedNation.id)) && (
+          {selectedNation?.spies != null && (
             <span className="text-sm text-yellow-400">
-              🕵 {bknetSpies.get(String(selectedNation.id))} spies
+              🕵 {selectedNation.spies} spies
             </span>
           )}
           <span className="text-sm text-slate-400 ml-2">Spies</span>
@@ -203,22 +189,22 @@ export default function CommandCenterPage() {
         )}
 
         {/* Wars Table */}
-        {selectedId !== null && (
+        {effectiveSelectedId !== null && (
           <div className="rounded-xl border border-[#2a3150] overflow-x-auto">
             <table className="w-full text-sm text-white min-w-max">
               <thead className="bg-[#161b2e] text-slate-400 text-xs uppercase">
                 <tr>
                   <th className="px-3 py-3 text-left">Opponent</th>
-                  <th className="px-3 py-3 text-right">BK Res</th>
+                  <th className="px-3 py-3 text-right">MPR Res</th>
                   <th className="px-3 py-3 text-right">Opp Res</th>
-                  <th className="px-3 py-3 text-right">BK MAPs</th>
+                  <th className="px-3 py-3 text-right">MPR MAPs</th>
                   <th className="px-3 py-3 text-right">Opp MAPs</th>
-                  <th className="px-3 py-3 text-left">BK Status</th>
+                  <th className="px-3 py-3 text-left">MPR Status</th>
                   <th className="px-3 py-3 text-left">Opp Status</th>
-                  <th className="px-3 py-3 text-right">BK Sol</th>
-                  <th className="px-3 py-3 text-right">BK Tank</th>
-                  <th className="px-3 py-3 text-right">BK Air</th>
-                  <th className="px-3 py-3 text-right">BK Ship</th>
+                  <th className="px-3 py-3 text-right">MPR Sol</th>
+                  <th className="px-3 py-3 text-right">MPR Tank</th>
+                  <th className="px-3 py-3 text-right">MPR Air</th>
+                  <th className="px-3 py-3 text-right">MPR Ship</th>
                   <th className="px-3 py-3 text-right">Opp Sol</th>
                   <th className="px-3 py-3 text-right">Opp Tank</th>
                   <th className="px-3 py-3 text-right">Opp Air</th>
@@ -273,7 +259,7 @@ export default function CommandCenterPage() {
                           {bkMaps}
                         </td>
                         <td className="px-3 py-2 text-right">{oppMaps}</td>
-                        {/* BK Status */}
+                        {/* MPR Status */}
                         <td className="px-3 py-2">
                           <div className="flex flex-col gap-1">
                             {isBkBeiged && <StatusBadge label="Beiged" color="bg-amber-600/80 text-amber-100" />}

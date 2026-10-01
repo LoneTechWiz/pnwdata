@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>pnwdata</Name>
+  <Repository>pnwdata:unraid</Repository>
+  <Registry/>
+  <Network>pnw-stack</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>Local Politics &amp; War alliance website, SQLite database, and scheduled sync worker.</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>0</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>The darth-protocol container must use the pnw-stack network and the same BOT_SERVICE_TOKEN.</Requires>
+  <Config Name="Web Port" Target="3000" Default="3000" Mode="tcp" Description="pnwdata website port" Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="SQLite Data" Target="/app/data" Default="/mnt/user/appdata/pnwdata/data" Mode="rw" Description="Persistent SQLite database" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/pnwdata/data</Config>
+  <Config Name="P&amp;W API Key" Target="PNW_API_KEY" Default="" Mode="" Description="Politics &amp; War API key" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Public Site URL" Target="PUBLIC_APP_URL" Default="https://pnwdata.lonetechwiz.com" Mode="" Description="Public HTTPS origin used for login and logout redirects" Type="Variable" Display="advanced" Required="true" Mask="false">https://pnwdata.lonetechwiz.com</Config>
+  <Config Name="Session Secret" Target="SESSION_SECRET" Default="" Mode="" Description="High-entropy website session signing secret" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Shared Bot Service Token" Target="BOT_SERVICE_TOKEN" Default="" Mode="" Description="Must exactly match darth-protocol" Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Darth Protocol URL" Target="DARTH_PROTOCOL_URL" Default="http://darth-protocol:3100" Mode="" Description="Private Docker-network bot API URL" Type="Variable" Display="advanced" Required="true" Mask="false">http://darth-protocol:3100</Config>
+</Container>

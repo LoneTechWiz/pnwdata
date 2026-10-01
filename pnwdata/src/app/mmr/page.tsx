@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchMembers, fetchBknetMembers, fetchSyncStatus } from "@/lib/pnw";
+import { fetchMembers, fetchSyncStatus } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
@@ -105,26 +105,9 @@ export default function MmrPage() {
     queryFn: fetchMembers,
     refetchInterval: 10 * 60 * 1000,
   });
-  const { data: bknetMembers = [] } = useQuery({
-    queryKey: ["bknet_members"],
-    queryFn: fetchBknetMembers,
-    refetchInterval: 10 * 60 * 1000,
-  });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
 
   const members = allMembers.filter(m => m.vacation_mode_turns === 0);
-
-  // Build spy map: nation_id (string) -> { spies, hasIA }
-  const spyMap = useMemo(() => {
-    const map = new Map<string, { spies: number; hasIA: boolean }>();
-    for (const bm of bknetMembers) {
-      map.set(String(bm.nation.id), {
-        spies: bm.nation.military?.spies ?? 0,
-        hasIA: bm.nation.projects?.intelligence_agency === true,
-      });
-    }
-    return map;
-  }, [bknetMembers]);
 
   const rows = useMemo(() => members.map(m => {
     const c = m.num_cities;
@@ -133,25 +116,24 @@ export default function MmrPage() {
     const maxAircraft = mmr.hangars * 15 * c;
     const maxShips = mmr.dockyards * 5 * c;
 
-    const spyData = spyMap.get(String(m.id));
-    const currentSpies = spyData?.spies ?? 0;
-    const hasIA = spyData?.hasIA ?? false;
+    const currentSpies = m.spies ?? 0;
+    const hasIA = m.central_intelligence_agency === true;
     const maxSpies = hasIA ? 60 : 50;
-    const hasBknet = spyMap.has(String(m.id));
+    const hasSpyData = m.spies != null;
 
     const soldierOk = m.soldiers >= maxSoldiers;
     const tankOk = m.tanks >= maxTanks;
     const aircraftOk = m.aircraft >= maxAircraft;
     const shipOk = mmr.dockyards === 0 || m.ships >= maxShips;
-    const spiesOk = !hasBknet || currentSpies >= maxSpies;
+    const spiesOk = !hasSpyData || currentSpies >= maxSpies;
     const allMaxed = soldierOk && tankOk && aircraftOk && shipOk && spiesOk;
 
     return {
       m, maxSoldiers, maxTanks, maxAircraft, maxShips,
-      currentSpies, maxSpies, hasIA, hasBknet,
+      currentSpies, maxSpies, hasIA, hasSpyData,
       soldierOk, tankOk, aircraftOk, shipOk, spiesOk, allMaxed,
     };
-  }), [members, mmr, spyMap]);
+  }), [members, mmr]);
 
   // City-filtered rows — used for counts, avg days, and as base for table
   const cityRows = useMemo(() => {
@@ -196,7 +178,7 @@ export default function MmrPage() {
   const aircraftMaxed = cityRows.filter(r => r.aircraftOk || mmr.hangars === 0).length;
   const shipMaxed    = cityRows.filter(r => r.shipOk    || mmr.dockyards === 0).length;
   const spiesMaxed   = cityRows.filter(r => r.spiesOk).length;
-  const hasBknetData = bknetMembers.length > 0;
+  const hasSpyData = members.some((member) => member.spies != null);
 
   // Average days to max (from city-filtered, non-maxed members)
   type Row = typeof rows[0];
@@ -271,7 +253,7 @@ export default function MmrPage() {
             { label: "Tanks",    count: tankMaxed,    days: avgDaysTanks,    color: "text-orange-400", border: "border-orange-400/20" },
             { label: "Aircraft", count: aircraftMaxed, days: avgDaysAircraft, color: "text-blue-400",  border: "border-blue-400/20" },
             { label: "Ships",    count: shipMaxed,    days: avgDaysShips,    color: "text-cyan-400",   border: "border-cyan-400/20" },
-            { label: "Spies",    count: spiesMaxed,   days: hasBknetData ? avgDaysSpies : "—", color: "text-violet-400", border: "border-violet-400/20" },
+            { label: "Spies",    count: spiesMaxed,   days: hasSpyData ? avgDaysSpies : "—", color: "text-violet-400", border: "border-violet-400/20" },
           ].map(({ label, count, days, color, border }) => (
             <div key={label} className={`bg-[#161b2e] border ${border} rounded-xl p-4`}>
               <p className={`text-xs font-semibold uppercase tracking-wide ${color} mb-2`}>{label}</p>
@@ -343,14 +325,14 @@ export default function MmrPage() {
                 Ships: r.m.ships,
                 "Max Ships": r.maxShips,
                 "Ships %": r.maxShips > 0 ? Math.round(r.m.ships / r.maxShips * 100) : 100,
-                Spies: r.hasBknet ? r.currentSpies : "",
-                "Max Spies": r.hasBknet ? r.maxSpies : "",
-                "Has IA": r.hasBknet ? (r.hasIA ? "Yes" : "No") : "",
+                Spies: r.hasSpyData ? r.currentSpies : "",
+                "Max Spies": r.hasSpyData ? r.maxSpies : "",
+                "Has IA": r.hasSpyData ? (r.hasIA ? "Yes" : "No") : "",
                 "Soldiers OK": r.soldierOk ? "Yes" : "No",
                 "Tanks OK": r.tankOk ? "Yes" : "No",
                 "Aircraft OK": r.aircraftOk ? "Yes" : "No",
                 "Ships OK": r.shipOk ? "Yes" : "No",
-                "Spies OK": r.hasBknet ? (r.spiesOk ? "Yes" : "No") : "",
+                "Spies OK": r.hasSpyData ? (r.spiesOk ? "Yes" : "No") : "",
                 Status: r.allMaxed ? "Maxed" : "Low",
               }))}
             />
@@ -415,7 +397,7 @@ export default function MmrPage() {
                   <UnitCell current={r.m.aircraft} max={r.maxAircraft} />
                   <UnitCell current={r.m.ships} max={r.maxShips} />
                   <td className="px-3 py-2 text-right">
-                    {r.hasBknet ? (
+                    {r.hasSpyData ? (
                       <div className="flex flex-col items-end gap-0.5">
                         <div className="flex items-center gap-1">
                           {r.spiesOk

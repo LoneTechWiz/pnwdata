@@ -1,26 +1,21 @@
 // src/app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
-import { readRoleConfig, hasAccess } from "@/lib/role-config";
-import { findNationByDiscord } from "@/lib/supabase";
+import { COOKIE_OPTIONS, createSessionToken, getSession, SESSION_COOKIE } from "@/lib/session";
+import { accessiblePages, readRoleConfig, hasAccess } from "@/lib/role-config";
+import { findNationByDiscordId } from "@/lib/db";
+import { getDiscordGuildMember, getDiscordGuildRoles } from "@/lib/darth-protocol";
 
 const SEND_WAR_TARGETS_ROLES = ["archduke", "viceroy", "defense peeps"];
 
-let cachedGuildRoles: { id: string; name: string }[] = [];
+let cachedGuildRoles: { id: string; name: string; isAdmin?: boolean }[] = [];
 let guildRoleCacheTime = 0;
 const GUILD_ROLE_CACHE_TTL = 10 * 60 * 1000;
 
-async function getGuildRoles(): Promise<{ id: string; name: string }[]> {
+async function getGuildRoles(): Promise<{ id: string; name: string; isAdmin?: boolean }[]> {
   if (Date.now() - guildRoleCacheTime < GUILD_ROLE_CACHE_TTL) return cachedGuildRoles;
   try {
-    const res = await fetch(
-      `https://discord.com/api/v10/guilds/${process.env.DISCORD_GUILD_ID}/roles`,
-      { headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` } }
-    );
-    if (res.ok) {
-      cachedGuildRoles = await res.json() as { id: string; name: string }[];
-      guildRoleCacheTime = Date.now();
-    }
+    cachedGuildRoles = await getDiscordGuildRoles();
+    guildRoleCacheTime = Date.now();
   } catch { /* use stale cache */ }
   return cachedGuildRoles;
 }
@@ -31,28 +26,47 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const config = await readRoleConfig();
-  const canManageRoles = session.isEmperor || hasAccess(config, "/role-config", session.roleIds);
-  const accessiblePages = session.isEmperor
-    ? Object.keys(config.pages)
-    : Object.keys(config.pages).filter((p) => hasAccess(config, p, session.roleIds));
-  // Look up the user's nation by matching their Discord username
-  const row = await findNationByDiscord(session.username);
-
   const guildRoles = await getGuildRoles();
+  let roleIds = session.roleIds;
+  let isAdmin = session.isEmperor;
+  try {
+    const member = await getDiscordGuildMember(session.discordId);
+    roleIds = member.roles;
+    isAdmin = guildRoles.some((role) => role.isAdmin && roleIds.includes(role.id));
+  } catch (error) {
+    console.error("[auth/me] Live Discord role refresh failed; using signed session roles:", error);
+  }
+
+  const canManageRoles = isAdmin || hasAccess(config, "/role-config", roleIds);
+  const pages = accessiblePages(config, roleIds, isAdmin);
+  const row = findNationByDiscordId(session.discordId);
+
   const userRoleNames = guildRoles
-    .filter(r => session.roleIds.includes(r.id))
+    .filter(r => roleIds.includes(r.id))
     .map(r => r.name.toLowerCase());
-  const canSendWarTargets = session.isEmperor ||
+  const canSendWarTargets = isAdmin ||
     SEND_WAR_TARGETS_ROLES.some(name => userRoleNames.includes(name));
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     discordId: session.discordId,
     username: session.username,
     avatar: session.avatar,
-    isEmperor: session.isEmperor,
+    isEmperor: isAdmin,
     canManageRoles,
     canSendWarTargets,
-    accessiblePages,
+    accessiblePages: pages,
     nationId: row?.id ?? null,
   });
+
+  if (isAdmin !== session.isEmperor || roleIds.join(",") !== session.roleIds.join(",")) {
+    const token = await createSessionToken({
+      discordId: session.discordId,
+      username: session.username,
+      avatar: session.avatar,
+      roleIds,
+      isEmperor: isAdmin,
+    });
+    response.cookies.set(SESSION_COOKIE, token, COOKIE_OPTIONS);
+  }
+  return response;
 }

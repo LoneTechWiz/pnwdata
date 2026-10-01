@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import db from "./db";
 
 const SYNC_REQUEST_KEY = "sync-request";
 
@@ -12,45 +12,39 @@ export interface SyncRequest {
 }
 
 export async function readSyncRequest(): Promise<SyncRequest | null> {
-  const { data, error } = await supabase
-    .from("app_config")
-    .select("value")
-    .eq("key", SYNC_REQUEST_KEY)
-    .maybeSingle();
-  if (error) throw new Error(`Read sync request: ${error.message}`);
-  return (data?.value as SyncRequest | undefined) ?? null;
+  const row = db.prepare("SELECT value FROM app_config WHERE key = ?").get(SYNC_REQUEST_KEY) as { value: string } | undefined;
+  if (!row) return null;
+  return JSON.parse(row.value) as SyncRequest;
 }
 
 async function writeSyncRequest(request: SyncRequest): Promise<void> {
-  const { error } = await supabase.from("app_config").upsert({
-    key: SYNC_REQUEST_KEY,
-    value: request,
-    updated_at: Date.now(),
-  });
-  if (error) throw new Error(`Write sync request: ${error.message}`);
+  db.prepare(`
+    INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(SYNC_REQUEST_KEY, JSON.stringify(request), Date.now());
 }
 
 export async function enqueueSyncRequest(): Promise<{ request: SyncRequest; created: boolean }> {
-  const existing = await readSyncRequest();
-  if (existing?.status === "pending" || existing?.status === "running") {
-    return { request: existing, created: false };
-  }
+  return db.transaction(() => {
+    const row = db.prepare("SELECT value FROM app_config WHERE key = ?").get(SYNC_REQUEST_KEY) as { value: string } | undefined;
+    const existing = row ? JSON.parse(row.value) as SyncRequest : null;
+    if (existing?.status === "pending" || existing?.status === "running") {
+      return { request: existing, created: false };
+    }
 
-  const now = Date.now();
-  const request: SyncRequest = {
-    id: crypto.randomUUID(),
-    status: "pending",
-    requestedAt: now,
-  };
-  await writeSyncRequest(request);
-
-  const { error } = await supabase
-    .from("sync_status")
-    .update({ status: "syncing", error: null })
-    .eq("id", 1);
-  if (error) throw new Error(`Queue sync status: ${error.message}`);
-
-  return { request, created: true };
+    const now = Date.now();
+    const request: SyncRequest = {
+      id: crypto.randomUUID(),
+      status: "pending",
+      requestedAt: now,
+    };
+    db.prepare(`
+      INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(SYNC_REQUEST_KEY, JSON.stringify(request), now);
+    db.prepare("UPDATE sync_status SET status = 'syncing', error = NULL WHERE id = 1").run();
+    return { request, created: true };
+  })();
 }
 
 export async function processSyncRequest(runSync: () => Promise<void>): Promise<boolean> {

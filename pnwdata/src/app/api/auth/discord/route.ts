@@ -1,19 +1,19 @@
 // src/app/api/auth/discord/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { getDiscordAuthorizeUrl } from "@/lib/darth-protocol";
+import { getPublicUrl } from "@/lib/site-url";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const state = randomBytes(16).toString("hex");
 
-  const params = new URLSearchParams({
-    client_id: process.env.DISCORD_CLIENT_ID!,
-    redirect_uri: process.env.DISCORD_REDIRECT_URI!,
-    response_type: "code",
-    scope: "identify guilds.members.read",
-    state,
-  });
-
-  const discordUrl = `https://discord.com/oauth2/authorize?${params}`;
+  let discordUrl: string;
+  try {
+    ({ url: discordUrl } = await getDiscordAuthorizeUrl(state));
+  } catch (error) {
+    console.error("[auth/discord] Darth Protocol request failed:", error);
+    return NextResponse.redirect(getPublicUrl("/login?error=oauth_unavailable", req));
+  }
 
   const res = NextResponse.redirect(discordUrl);
   res.cookies.set("__oauth_state", state, {

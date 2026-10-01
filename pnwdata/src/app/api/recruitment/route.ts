@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { selectAll, supabase } from "@/lib/supabase";
+import db from "@/lib/db";
 import {
   recruitsIn,
   retentionFor,
@@ -18,31 +18,34 @@ interface AllianceRow {
   rank: number | null;
 }
 
+interface RecruitmentStatus {
+  last_synced_at: number | null;
+  status: string;
+  error: string | null;
+  nations_scanned: number | null;
+  alliances_scanned: number | null;
+  first_snapshot_at: number | null;
+}
+
 export async function GET() {
-  const { data: statusRow, error: statusError } = await supabase
-    .from("recruitment_sync_status")
-    .select("last_synced_at, status, error, nations_scanned, alliances_scanned, first_snapshot_at")
-    .eq("id", 1).maybeSingle();
-  if (statusError) return NextResponse.json({ error: statusError.message }, { status: 500 });
+  const statusRow = db.prepare(`
+    SELECT last_synced_at, status, error, nations_scanned, alliances_scanned, first_snapshot_at
+    FROM recruitment_sync_status WHERE id = 1
+  `).get() as RecruitmentStatus | undefined;
 
   const now = Date.now();
   const firstSnapshotAt = statusRow?.first_snapshot_at ?? null;
-
-  const alliances = await selectAll<AllianceRow>("alliance_names", "id, name, acronym, score, color, rank");
-
-  const memberships = await selectAll<MembershipRow>("alliance_memberships", "nation_id, alliance_id, join_date, left_at");
+  const alliances = db.prepare("SELECT id, name, acronym, score, color, rank FROM alliance_names").all() as AllianceRow[];
+  const memberships = db.prepare("SELECT nation_id, alliance_id, join_date, left_at FROM alliance_memberships").all() as MembershipRow[];
 
   const byAlliance = new Map<number, MembershipRow[]>();
-  for (const m of memberships) {
-    let list = byAlliance.get(m.alliance_id);
-    if (!list) {
-      list = [];
-      byAlliance.set(m.alliance_id, list);
-    }
-    list.push(m);
+  for (const membership of memberships) {
+    const rows = byAlliance.get(membership.alliance_id) ?? [];
+    rows.push(membership);
+    byAlliance.set(membership.alliance_id, rows);
   }
 
-  function pct(bucket: ReturnType<typeof retentionFor>) {
+  function percentage(bucket: ReturnType<typeof retentionFor>) {
     return {
       numerator: bucket.numerator,
       denominator: bucket.denominator,
@@ -50,35 +53,24 @@ export async function GET() {
     };
   }
 
-  const rows = alliances.map((a) => {
-    const memberRows = byAlliance.get(a.id) ?? [];
-    const active = memberRows.filter((m) => m.left_at == null).length;
+  const rows = alliances.map((alliance) => {
+    const memberRows = byAlliance.get(alliance.id) ?? [];
     return {
-      id: a.id,
-      name: a.name,
-      acronym: a.acronym,
-      score: a.score,
-      color: a.color,
-      rank: a.rank,
-      active_members: active,
+      ...alliance,
+      active_members: memberRows.filter((membership) => membership.left_at == null).length,
       recruits_7d: recruitsIn(memberRows, 7, now),
       recruits_30d: recruitsIn(memberRows, 30, now),
       recruits_60d: recruitsIn(memberRows, 60, now),
       recruits_90d: recruitsIn(memberRows, 90, now),
-      retention_30d: pct(retentionFor(memberRows, 30, now, firstSnapshotAt)),
-      retention_60d: pct(retentionFor(memberRows, 60, now, firstSnapshotAt)),
-      retention_90d: pct(retentionFor(memberRows, 90, now, firstSnapshotAt)),
+      retention_30d: percentage(retentionFor(memberRows, 30, now, firstSnapshotAt)),
+      retention_60d: percentage(retentionFor(memberRows, 60, now, firstSnapshotAt)),
+      retention_90d: percentage(retentionFor(memberRows, 90, now, firstSnapshotAt)),
     };
   });
 
-  // Filter out alliances with zero observed memberships across the board.
-  const filtered = rows.filter(
-    (r) =>
-      r.active_members > 0 ||
-      r.recruits_7d > 0 ||
-      r.recruits_30d > 0 ||
-      r.recruits_60d > 0 ||
-      r.recruits_90d > 0
+  const filtered = rows.filter((row) =>
+    row.active_members > 0 || row.recruits_7d > 0 || row.recruits_30d > 0 ||
+    row.recruits_60d > 0 || row.recruits_90d > 0,
   );
 
   return NextResponse.json({
