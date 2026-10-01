@@ -22,17 +22,26 @@ testDb.exec(`
   );
 `);
 
+let tradePrices: Record<string, number> | null = { steel: 2, coal: 3 };
+
 vi.mock("./db", () => ({
   default: testDb,
-  readJsonSingleton: vi.fn(() => ({ id: 9000, name: "Main Alliance" })),
+  readJsonSingleton: vi.fn((key: string) => {
+    if (key === "trade_prices") return tradePrices;
+    return { id: 9000, name: "Main Alliance" };
+  }),
 }));
 
-const { upsertTaxBrackets, readTaxBracketConfigs, writeTaxBracketRealRates, replaceTaxRecords, readTaxRevenueSummary } = await import("./tax-revenue");
+const {
+  upsertTaxBrackets, readTaxBracketConfigs, writeTaxBracketRealRates, replaceTaxRecords,
+  readTaxRevenueSummary, readTaxRecordDetails,
+} = await import("./tax-revenue");
 
 afterAll(() => testDb.close());
 
 beforeEach(() => {
   testDb.exec("DELETE FROM tax_bracket_config; DELETE FROM tax_records; DELETE FROM offshore_tax_records; DELETE FROM offshore_alliances;");
+  tradePrices = { steel: 2, coal: 3 };
 });
 
 describe("upsertTaxBrackets", () => {
@@ -159,5 +168,96 @@ describe("readTaxRevenueSummary time windows", () => {
     expect(bracket.safekeptMoney24h).toBe(800);
     expect(bracket.recordCount24h).toBe(1);
     expect(bracket.recordCount).toBe(2);
+  });
+});
+
+describe("resource value priced at sync time", () => {
+  const NOW = Date.parse("2026-10-01T12:00:00Z");
+
+  beforeEach(() => {
+    upsertTaxBrackets(9000, [{ id: 30076, bracket_name: "DirectDeposit100100", tax_rate: 100, resource_tax_rate: 100 }], 1000);
+    writeTaxBracketRealRates(9000, 30076, 20, 20);
+  });
+
+  it("stamps resource_value_usd using the trade price current when the record is stored", () => {
+    tradePrices = { steel: 5 };
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: "2026-01-01", sender_id: 1, tax_id: 30076, money: 0, steel: 10 },
+    ], 1000);
+
+    const row = testDb.prepare("SELECT data FROM tax_records WHERE id = 1").get() as { data: string };
+    expect(JSON.parse(row.data).resource_value_usd).toBe(50); // 10 steel * $5
+  });
+
+  it("does not recompute resource_value_usd against a later (different) trade price", () => {
+    tradePrices = { steel: 5 };
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: "2026-01-01", sender_id: 1, tax_id: 30076, money: 0, steel: 10 },
+    ], 1000);
+
+    tradePrices = { steel: 999 }; // price moves after the record was synced
+    const { brackets: [bracket] } = readTaxRevenueSummary(NOW);
+    expect(bracket.actualResourceValueUsd).toBe(50); // still priced at the original $5
+  });
+
+  it("folds resource value into real/safekept figures using the bracket's resource ratio", () => {
+    tradePrices = { steel: 10 };
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: new Date(NOW - 60 * 60 * 1000).toISOString(), sender_id: 1, tax_id: 30076, money: 1000, steel: 10 },
+    ], 1000);
+
+    const { brackets: [bracket], last24h } = readTaxRevenueSummary(NOW);
+    expect(bracket.actualResourceValueUsd).toBe(100); // 10 steel * $10
+    expect(bracket.realResourceValueUsd).toBe(20); // 20% real resource rate
+    expect(bracket.safekeptResourceValueUsd).toBe(80);
+    expect(bracket.actualTotalUsd).toBe(1100); // 1000 money + 100 resource value
+    expect(bracket.realTotalUsd).toBe(220); // 200 real money + 20 real resource value
+    expect(bracket.actualTotalUsd24h).toBe(1100);
+    expect(last24h.actualTotalUsd).toBe(1100);
+    expect(last24h.realTotalUsd).toBe(220);
+  });
+});
+
+describe("readTaxRecordDetails", () => {
+  const NOW = Date.parse("2026-10-01T12:00:00Z");
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    upsertTaxBrackets(9000, [{ id: 30076, bracket_name: "DirectDeposit100100", tax_rate: 100, resource_tax_rate: 100 }], 1000);
+    writeTaxBracketRealRates(9000, 30076, 20, 20);
+  });
+
+  it("returns one row per nation payment within the window, with real/safekept split and sender name", () => {
+    tradePrices = { steel: 10 };
+    replaceTaxRecords("tax_records", null, [
+      {
+        id: 1, date: new Date(NOW - 60 * 60 * 1000).toISOString(), sender_id: 526341, tax_id: 30076,
+        money: 1000, steel: 10, sender: { nation_name: "Ironwood" },
+      },
+      { id: 2, date: new Date(NOW - 2 * DAY_MS).toISOString(), sender_id: 2, tax_id: 30076, money: 5000 }, // outside 24h window
+    ], 1000);
+
+    const details = readTaxRecordDetails(DAY_MS, NOW);
+    expect(details).toHaveLength(1);
+    const [row] = details;
+    expect(row.senderId).toBe(526341);
+    expect(row.senderName).toBe("Ironwood");
+    expect(row.allianceName).toBe("Main Alliance");
+    expect(row.bracketName).toBe("DirectDeposit100100");
+    expect(row.actualMoney).toBe(1000);
+    expect(row.realMoney).toBe(200);
+    expect(row.actualResourceValueUsd).toBe(100);
+    expect(row.realResourceValueUsd).toBe(20);
+    expect(row.actualTotalUsd).toBe(1100);
+    expect(row.resources.steel).toBe(10);
+  });
+
+  it("falls back to a placeholder sender name when P&W didn't include one", () => {
+    replaceTaxRecords("tax_records", null, [
+      { id: 1, date: new Date(NOW - 60 * 60 * 1000).toISOString(), sender_id: 777, tax_id: 30076, money: 100 },
+    ], 1000);
+
+    const [row] = readTaxRecordDetails(DAY_MS, NOW);
+    expect(row.senderName).toBe("Nation #777");
   });
 });

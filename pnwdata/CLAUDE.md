@@ -52,9 +52,10 @@ pnwdata ← authenticated local HTTP → darth-protocol ← Discord gateway
 | `src/lib/offshore-config.ts` | CRUD for member-submitted offshore/extension API keys; verifies each key against the PnW API and masks it before it ever reaches the client |
 | `src/lib/offshore-sync.ts` | Syncs members/wars/bank records per configured offshore alliance into the `offshore_*` tables; `startOffshoreSyncLoop()` runs every 10 min |
 | `src/app/api/offshore-config/route.ts` | GET (any logged-in member) / POST (add+verify a key) / DELETE (submitter or `/offshore-config` role only) |
-| `src/lib/tax-revenue.ts` | Syncs P&W tax brackets + automatic tax collection records (`taxrecs`, distinct from `bankrecs`) per alliance; computes real revenue as `actual × (real_rate / nominal_rate)` using each bracket's admin-configured real rate |
+| `src/lib/tax-revenue.ts` | Syncs P&W tax brackets + automatic tax collection records (`taxrecs`, distinct from `bankrecs`) per alliance; computes real revenue as `actual × (real_rate / nominal_rate)` using each bracket's admin-configured real rate. Each record's resources are priced in USD against `trade_prices` once, at sync time, and that value is stored on the record (`resource_value_usd`) rather than recomputed at read time |
 | `src/app/api/tax-config/route.ts` | GET/POST SQLite-backed real tax rates per bracket; requires `canManage` (Emperor or `/tax-config` role) |
-| `src/app/api/tax-revenue/route.ts` | GET the computed actual/real/safekept revenue per bracket across all alliances; requires `/revenue` role or Emperor |
+| `src/app/api/tax-revenue/route.ts` | GET the computed actual/real/safekept revenue (money + resource value) per bracket, plus last-24h and 30-day-daily-average totals, across all alliances; requires `/revenue` role or Emperor |
+| `src/app/api/tax-revenue/records/route.ts` | GET individual tax payments (one row per nation per payment) from the last 24h, for the per-nation CSV export; same access check as `/api/tax-revenue` |
 
 ### Database Tables
 

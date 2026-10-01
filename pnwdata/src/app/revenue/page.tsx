@@ -19,10 +19,16 @@ interface BracketRevenue {
   actualMoney: number;
   realMoney: number;
   safekeptMoney: number;
+  actualTotalUsd: number;
+  realTotalUsd: number;
+  safekeptTotalUsd: number;
   recordCount: number;
   actualMoney24h: number;
   realMoney24h: number;
   safekeptMoney24h: number;
+  actualTotalUsd24h: number;
+  realTotalUsd24h: number;
+  safekeptTotalUsd24h: number;
   recordCount24h: number;
 }
 
@@ -30,12 +36,36 @@ interface TaxMoneyTotals {
   actualMoney: number;
   realMoney: number;
   safekeptMoney: number;
+  actualResourceValueUsd: number;
+  realResourceValueUsd: number;
+  safekeptResourceValueUsd: number;
+  actualTotalUsd: number;
+  realTotalUsd: number;
+  safekeptTotalUsd: number;
 }
 
 interface TaxRevenueOverview {
   brackets: BracketRevenue[];
   last24h: TaxMoneyTotals;
   dailyAverage30d: TaxMoneyTotals;
+}
+
+interface TaxRecordDetail {
+  allianceName: string;
+  bracketName: string;
+  date: string;
+  senderId: number;
+  senderName: string;
+  actualMoney: number;
+  realMoney: number;
+  safekeptMoney: number;
+  actualResourceValueUsd: number;
+  realResourceValueUsd: number;
+  safekeptResourceValueUsd: number;
+  actualTotalUsd: number;
+  realTotalUsd: number;
+  safekeptTotalUsd: number;
+  resources: Record<string, number>;
 }
 
 function fmt(n: number) {
@@ -47,9 +77,27 @@ function TimeWindowCards({ label, icon, totals }: { label: string; icon: typeof 
     <section>
       <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">{label}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard label="Actual Collected" value={fmt(totals.actualMoney)} icon={icon} color="text-slate-300" />
-        <StatCard label="Real Revenue" value={fmt(totals.realMoney)} icon={Wallet} color="text-green-400" />
-        <StatCard label="Member Safekept" value={fmt(totals.safekeptMoney)} icon={PiggyBank} color="text-yellow-400" />
+        <StatCard
+          label="Actual Collected"
+          value={fmt(totals.actualTotalUsd)}
+          icon={icon}
+          color="text-slate-300"
+          sub={`incl. ${fmt(totals.actualResourceValueUsd)} resources`}
+        />
+        <StatCard
+          label="Real Revenue"
+          value={fmt(totals.realTotalUsd)}
+          icon={Wallet}
+          color="text-green-400"
+          sub={`incl. ${fmt(totals.realResourceValueUsd)} resources`}
+        />
+        <StatCard
+          label="Member Safekept"
+          value={fmt(totals.safekeptTotalUsd)}
+          icon={PiggyBank}
+          color="text-yellow-400"
+          sub={`incl. ${fmt(totals.safekeptResourceValueUsd)} resources`}
+        />
       </div>
     </section>
   );
@@ -65,15 +113,24 @@ export default function RevenuePage() {
     refetchInterval: 10 * 60 * 1000,
   });
 
+  const { data: records = [] } = useQuery<TaxRecordDetail[]>({
+    queryKey: ["taxRevenueRecords"],
+    queryFn: () => fetch("/api/tax-revenue/records").then((r) => {
+      if (!r.ok) throw new Error("Access denied or failed to load");
+      return r.json();
+    }),
+    refetchInterval: 10 * 60 * 1000,
+  });
+
   const brackets = useMemo(() => data?.brackets ?? [], [data]);
 
   const byAlliance = useMemo(() => {
     const map = new Map<string, { actual: number; real: number; safekept: number }>();
     for (const b of brackets) {
       const entry = map.get(b.allianceName) ?? { actual: 0, real: 0, safekept: 0 };
-      entry.actual += b.actualMoney;
-      entry.real += b.realMoney;
-      entry.safekept += b.safekeptMoney;
+      entry.actual += b.actualTotalUsd;
+      entry.real += b.realTotalUsd;
+      entry.safekept += b.safekeptTotalUsd;
       map.set(b.allianceName, entry);
     }
     return [...map.entries()];
@@ -90,23 +147,52 @@ export default function RevenuePage() {
             <h1 className="text-xl font-bold text-white">Revenue &amp; Taxes</h1>
             <p className="text-slate-400 text-sm mt-1">
               Actual tax collection vs. real alliance revenue, based on each bracket&apos;s configured real rate.
+              Resources are priced in USD at the market rate current at the time each tax payment was synced.
             </p>
           </div>
-          <ExportButton
-            filename="tax-revenue"
-            getData={() => brackets.map((b) => ({
-              Alliance: b.allianceName,
-              Bracket: b.bracketName,
-              "Nominal Money %": b.nominalMoneyRate,
-              "Nominal Resource %": b.nominalResourceRate,
-              "Real Money %": b.realMoneyRate,
-              "Real Resource %": b.realResourceRate,
-              "Actual Collected (24h)": b.actualMoney24h,
-              "Real Revenue (24h)": b.realMoney24h,
-              "Safekept (24h)": b.safekeptMoney24h,
-              "Tax Records (24h)": b.recordCount24h,
-            }))}
-          />
+          <div className="flex items-center gap-2">
+            <ExportButton
+              filename="tax-revenue-by-bracket"
+              label="Export by Bracket"
+              getData={() => brackets.map((b) => ({
+                Alliance: b.allianceName,
+                Bracket: b.bracketName,
+                "Nominal Money %": b.nominalMoneyRate,
+                "Nominal Resource %": b.nominalResourceRate,
+                "Real Money %": b.realMoneyRate,
+                "Real Resource %": b.realResourceRate,
+                "Actual Collected (24h)": b.actualMoney24h,
+                "Actual Resource Value USD (24h)": b.actualTotalUsd24h - b.actualMoney24h,
+                "Actual Total USD (24h)": b.actualTotalUsd24h,
+                "Real Revenue (24h)": b.realMoney24h,
+                "Real Resource Value USD (24h)": b.realTotalUsd24h - b.realMoney24h,
+                "Real Total USD (24h)": b.realTotalUsd24h,
+                "Safekept Total USD (24h)": b.safekeptTotalUsd24h,
+                "Tax Records (24h)": b.recordCount24h,
+              }))}
+            />
+            <ExportButton
+              filename="tax-revenue-per-nation"
+              label="Export Per-Nation"
+              getData={() => records.map((r) => ({
+                Date: r.date,
+                Alliance: r.allianceName,
+                Bracket: r.bracketName,
+                "Nation ID": r.senderId,
+                Nation: r.senderName,
+                "Actual Money": r.actualMoney,
+                "Real Money": r.realMoney,
+                "Safekept Money": r.safekeptMoney,
+                "Actual Resource Value USD": r.actualResourceValueUsd,
+                "Real Resource Value USD": r.realResourceValueUsd,
+                "Safekept Resource Value USD": r.safekeptResourceValueUsd,
+                "Actual Total USD": r.actualTotalUsd,
+                "Real Total USD": r.realTotalUsd,
+                "Safekept Total USD": r.safekeptTotalUsd,
+                ...r.resources,
+              }))}
+            />
+          </div>
         </div>
 
         {data && (
@@ -132,7 +218,8 @@ export default function RevenuePage() {
         )}
 
         <div>
-          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">By Bracket (Last 24 Hours)</h3>
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-1">By Bracket (Last 24 Hours)</h3>
+          <p className="text-slate-500 text-xs mb-3">Dollar figures include resource value, priced at sync time.</p>
           <div className="rounded-xl border border-[#2a3150] overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
@@ -155,9 +242,9 @@ export default function RevenuePage() {
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400 font-mono text-xs">{b.nominalMoneyRate}% / {b.nominalResourceRate}%</td>
                     <td className="px-4 py-3 text-right text-slate-400 font-mono text-xs">{b.realMoneyRate}% / {b.realResourceRate}%</td>
-                    <td className="px-4 py-3 text-right text-slate-200">{fmt(b.actualMoney24h)}</td>
-                    <td className="px-4 py-3 text-right text-green-400 font-medium">{fmt(b.realMoney24h)}</td>
-                    <td className="px-4 py-3 text-right text-yellow-400">{fmt(b.safekeptMoney24h)}</td>
+                    <td className="px-4 py-3 text-right text-slate-200">{fmt(b.actualTotalUsd24h)}</td>
+                    <td className="px-4 py-3 text-right text-green-400 font-medium">{fmt(b.realTotalUsd24h)}</td>
+                    <td className="px-4 py-3 text-right text-yellow-400">{fmt(b.safekeptTotalUsd24h)}</td>
                     <td className="px-4 py-3 text-right text-slate-500 text-xs">{b.recordCount24h}</td>
                   </tr>
                 ))}

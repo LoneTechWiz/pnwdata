@@ -17,7 +17,23 @@ export interface RawTaxRecord {
   tax_id: string | number;
   money: number;
   sender?: { nation_name: string } | null;
+  /** Dollar value of this record's resources, priced at the market rate current when it was synced. Absent on records stored before this field existed. */
+  resource_value_usd?: number;
   [resource: string]: unknown;
+}
+
+interface TradePriceSnapshot {
+  coal: number; oil: number; uranium: number; iron: number; bauxite: number; lead: number;
+  gasoline: number; munitions: number; steel: number; aluminum: number; food: number;
+}
+
+function computeResourceValueUsd(record: RawTaxRecord, prices: TradePriceSnapshot): number {
+  let total = 0;
+  for (const key of RESOURCE_KEYS) {
+    const amount = Number(record[key]) || 0;
+    total += amount * (prices[key] ?? 0);
+  }
+  return total;
 }
 
 export interface TaxBracketConfig {
@@ -57,10 +73,24 @@ export interface BracketRevenue {
   safekeptMoney: number;
   actualResources: Record<ResourceKey, number>;
   realResources: Record<ResourceKey, number>;
+  /** Resource amounts priced in USD at the market rate current when each record was synced. */
+  actualResourceValueUsd: number;
+  realResourceValueUsd: number;
+  safekeptResourceValueUsd: number;
+  /** Money + resource value combined. */
+  actualTotalUsd: number;
+  realTotalUsd: number;
+  safekeptTotalUsd: number;
   recordCount: number;
   actualMoney24h: number;
   realMoney24h: number;
   safekeptMoney24h: number;
+  actualResourceValueUsd24h: number;
+  realResourceValueUsd24h: number;
+  safekeptResourceValueUsd24h: number;
+  actualTotalUsd24h: number;
+  realTotalUsd24h: number;
+  safekeptTotalUsd24h: number;
   recordCount24h: number;
 }
 
@@ -68,6 +98,12 @@ export interface TaxMoneyTotals {
   actualMoney: number;
   realMoney: number;
   safekeptMoney: number;
+  actualResourceValueUsd: number;
+  realResourceValueUsd: number;
+  safekeptResourceValueUsd: number;
+  actualTotalUsd: number;
+  realTotalUsd: number;
+  safekeptTotalUsd: number;
 }
 
 export interface TaxRevenueOverview {
@@ -79,7 +115,34 @@ export interface TaxRevenueOverview {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function emptyMoneyTotals(): TaxMoneyTotals {
-  return { actualMoney: 0, realMoney: 0, safekeptMoney: 0 };
+  return {
+    actualMoney: 0, realMoney: 0, safekeptMoney: 0,
+    actualResourceValueUsd: 0, realResourceValueUsd: 0, safekeptResourceValueUsd: 0,
+    actualTotalUsd: 0, realTotalUsd: 0, safekeptTotalUsd: 0,
+  };
+}
+
+/** Fills in the derived safekept/total fields of a TaxMoneyTotals from its accumulated actual/real figures. */
+function finalizeTotals(totals: TaxMoneyTotals): void {
+  totals.safekeptMoney = totals.actualMoney - totals.realMoney;
+  totals.safekeptResourceValueUsd = totals.actualResourceValueUsd - totals.realResourceValueUsd;
+  totals.actualTotalUsd = totals.actualMoney + totals.actualResourceValueUsd;
+  totals.realTotalUsd = totals.realMoney + totals.realResourceValueUsd;
+  totals.safekeptTotalUsd = totals.actualTotalUsd - totals.realTotalUsd;
+}
+
+function divideTotals(totals: TaxMoneyTotals, divisor: number): TaxMoneyTotals {
+  return {
+    actualMoney: totals.actualMoney / divisor,
+    realMoney: totals.realMoney / divisor,
+    safekeptMoney: totals.safekeptMoney / divisor,
+    actualResourceValueUsd: totals.actualResourceValueUsd / divisor,
+    realResourceValueUsd: totals.realResourceValueUsd / divisor,
+    safekeptResourceValueUsd: totals.safekeptResourceValueUsd / divisor,
+    actualTotalUsd: totals.actualTotalUsd / divisor,
+    realTotalUsd: totals.realTotalUsd / divisor,
+    safekeptTotalUsd: totals.safekeptTotalUsd / divisor,
+  };
 }
 
 function emptyResourceTotals(): Record<ResourceKey, number> {
@@ -115,16 +178,24 @@ export function upsertTaxBrackets(allianceId: number, brackets: RawTaxBracket[],
   })();
 }
 
+/** Stamps each record with its resource dollar value at the market price current right now (i.e. as of this sync), before it's persisted. */
+function withResourceValue(records: RawTaxRecord[]): RawTaxRecord[] {
+  const prices = readJsonSingleton<TradePriceSnapshot>("trade_prices");
+  if (!prices) return records;
+  return records.map((record) => ({ ...record, resource_value_usd: computeResourceValueUsd(record, prices) }));
+}
+
 export function replaceTaxRecords(table: "tax_records" | "offshore_tax_records", allianceId: number | null, records: RawTaxRecord[], now: number): void {
+  const stamped = withResourceValue(records);
   if (table === "tax_records") {
     const insert = db.prepare("INSERT OR REPLACE INTO tax_records (id, data, updated_at) VALUES (?, ?, ?)");
     db.transaction(() => {
-      for (const record of records) insert.run(Number(record.id), JSON.stringify(record), now);
+      for (const record of stamped) insert.run(Number(record.id), JSON.stringify(record), now);
     })();
   } else {
     const insert = db.prepare("INSERT OR REPLACE INTO offshore_tax_records (alliance_id, id, data, updated_at) VALUES (?, ?, ?, ?)");
     db.transaction(() => {
-      for (const record of records) insert.run(allianceId, Number(record.id), JSON.stringify(record), now);
+      for (const record of stamped) insert.run(allianceId, Number(record.id), JSON.stringify(record), now);
     })();
   }
 }
@@ -189,10 +260,22 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
         safekeptMoney: 0,
         actualResources: emptyResourceTotals(),
         realResources: emptyResourceTotals(),
+        actualResourceValueUsd: 0,
+        realResourceValueUsd: 0,
+        safekeptResourceValueUsd: 0,
+        actualTotalUsd: 0,
+        realTotalUsd: 0,
+        safekeptTotalUsd: 0,
         recordCount: 0,
         actualMoney24h: 0,
         realMoney24h: 0,
         safekeptMoney24h: 0,
+        actualResourceValueUsd24h: 0,
+        realResourceValueUsd24h: 0,
+        safekeptResourceValueUsd24h: 0,
+        actualTotalUsd24h: 0,
+        realTotalUsd24h: 0,
+        safekeptTotalUsd24h: 0,
         recordCount24h: 0,
       };
       results.set(key, entry);
@@ -209,8 +292,12 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
 
     const money = Number(record.money) || 0;
     const realMoney = money * moneyRatio;
+    const actualResVal = Number(record.resource_value_usd) || 0;
+    const realResVal = actualResVal * resourceRatio;
     entry.actualMoney += money;
     entry.realMoney += realMoney;
+    entry.actualResourceValueUsd += actualResVal;
+    entry.realResourceValueUsd += realResVal;
 
     for (const key of RESOURCE_KEYS) {
       const value = Number(record[key]) || 0;
@@ -223,11 +310,17 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
     if (Number.isFinite(recordTime) && recordTime >= since30d) {
       last30d.actualMoney += money;
       last30d.realMoney += realMoney;
+      last30d.actualResourceValueUsd += actualResVal;
+      last30d.realResourceValueUsd += realResVal;
       if (recordTime >= since24h) {
         last24h.actualMoney += money;
         last24h.realMoney += realMoney;
+        last24h.actualResourceValueUsd += actualResVal;
+        last24h.realResourceValueUsd += realResVal;
         entry.actualMoney24h += money;
         entry.realMoney24h += realMoney;
+        entry.actualResourceValueUsd24h += actualResVal;
+        entry.realResourceValueUsd24h += realResVal;
         entry.recordCount24h += 1;
       }
     }
@@ -244,18 +337,102 @@ export function readTaxRevenueSummary(now: number = Date.now()): TaxRevenueOverv
 
   for (const entry of results.values()) {
     entry.safekeptMoney = entry.actualMoney - entry.realMoney;
+    entry.safekeptResourceValueUsd = entry.actualResourceValueUsd - entry.realResourceValueUsd;
+    entry.actualTotalUsd = entry.actualMoney + entry.actualResourceValueUsd;
+    entry.realTotalUsd = entry.realMoney + entry.realResourceValueUsd;
+    entry.safekeptTotalUsd = entry.actualTotalUsd - entry.realTotalUsd;
+
     entry.safekeptMoney24h = entry.actualMoney24h - entry.realMoney24h;
+    entry.safekeptResourceValueUsd24h = entry.actualResourceValueUsd24h - entry.realResourceValueUsd24h;
+    entry.actualTotalUsd24h = entry.actualMoney24h + entry.actualResourceValueUsd24h;
+    entry.realTotalUsd24h = entry.realMoney24h + entry.realResourceValueUsd24h;
+    entry.safekeptTotalUsd24h = entry.actualTotalUsd24h - entry.realTotalUsd24h;
   }
-  last24h.safekeptMoney = last24h.actualMoney - last24h.realMoney;
-  last30d.safekeptMoney = last30d.actualMoney - last30d.realMoney;
+  finalizeTotals(last24h);
+  finalizeTotals(last30d);
 
   return {
-    brackets: [...results.values()].sort((a, b) => b.actualMoney24h - a.actualMoney24h),
+    brackets: [...results.values()].sort((a, b) => b.actualTotalUsd24h - a.actualTotalUsd24h),
     last24h,
-    dailyAverage30d: {
-      actualMoney: last30d.actualMoney / 30,
-      realMoney: last30d.realMoney / 30,
-      safekeptMoney: last30d.safekeptMoney / 30,
-    },
+    dailyAverage30d: divideTotals(last30d, 30),
   };
+}
+
+export interface TaxRecordDetail {
+  allianceId: number;
+  allianceName: string;
+  bracketId: number;
+  bracketName: string;
+  date: string;
+  senderId: number;
+  senderName: string;
+  actualMoney: number;
+  realMoney: number;
+  safekeptMoney: number;
+  actualResourceValueUsd: number;
+  realResourceValueUsd: number;
+  safekeptResourceValueUsd: number;
+  actualTotalUsd: number;
+  realTotalUsd: number;
+  safekeptTotalUsd: number;
+  resources: Record<ResourceKey, number>;
+}
+
+/** Individual tax transactions (one row per nation per payment), scoped to the last `windowMs` (default 24h). */
+export function readTaxRecordDetails(windowMs: number = DAY_MS, now: number = Date.now()): TaxRecordDetail[] {
+  const configs = readTaxBracketConfigs();
+  const configByKey = new Map(configs.map((config) => [`${config.allianceId}:${config.bracketId}`, config]));
+  const names = allianceNames();
+  const since = now - windowMs;
+  const details: TaxRecordDetail[] = [];
+
+  function process(allianceId: number, record: RawTaxRecord): void {
+    const recordTime = Date.parse(record.date);
+    if (!Number.isFinite(recordTime) || recordTime < since) return;
+    const bracketId = Number(record.tax_id);
+    if (!bracketId) return;
+
+    const config = configByKey.get(`${allianceId}:${bracketId}`);
+    const moneyRatio = config && config.nominalMoneyRate > 0 ? config.realMoneyRate / config.nominalMoneyRate : 0;
+    const resourceRatio = config && config.nominalResourceRate > 0 ? config.realResourceRate / config.nominalResourceRate : 0;
+
+    const money = Number(record.money) || 0;
+    const realMoney = money * moneyRatio;
+    const actualResVal = Number(record.resource_value_usd) || 0;
+    const realResVal = actualResVal * resourceRatio;
+    const resources = Object.fromEntries(
+      RESOURCE_KEYS.map((key) => [key, Number(record[key]) || 0]),
+    ) as Record<ResourceKey, number>;
+
+    details.push({
+      allianceId,
+      allianceName: config?.allianceName ?? names.get(allianceId) ?? `Alliance #${allianceId}`,
+      bracketId,
+      bracketName: config?.bracketName ?? `Bracket #${bracketId}`,
+      date: record.date,
+      senderId: Number(record.sender_id),
+      senderName: record.sender?.nation_name ?? `Nation #${record.sender_id}`,
+      actualMoney: money,
+      realMoney,
+      safekeptMoney: money - realMoney,
+      actualResourceValueUsd: actualResVal,
+      realResourceValueUsd: realResVal,
+      safekeptResourceValueUsd: actualResVal - realResVal,
+      actualTotalUsd: money + actualResVal,
+      realTotalUsd: realMoney + realResVal,
+      safekeptTotalUsd: (money + actualResVal) - (realMoney + realResVal),
+      resources,
+    });
+  }
+
+  const mainMeta = readJsonSingleton<{ id: number }>("alliance_meta");
+  if (mainMeta) {
+    const mainRows = db.prepare("SELECT data FROM tax_records").all() as Array<{ data: string }>;
+    for (const row of mainRows) process(mainMeta.id, JSON.parse(row.data));
+  }
+
+  const offshoreRows = db.prepare("SELECT alliance_id, data FROM offshore_tax_records").all() as Array<{ alliance_id: number; data: string }>;
+  for (const row of offshoreRows) process(row.alliance_id, JSON.parse(row.data));
+
+  return details.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 }
