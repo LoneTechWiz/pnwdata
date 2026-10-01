@@ -1,0 +1,14 @@
+[Unit]
+Description=PnW Data Scheduled Sync Worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/devin/dev/pnwdata
+ExecStart=/home/devin/dev/pnwdata/node_modules/.bin/tsx scripts/sync-worker.ts
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
