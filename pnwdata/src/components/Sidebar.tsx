@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, BarChart2, Shield,
   Search, Clock, Target, UserPlus,
-  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt, X,
 } from "lucide-react";
+import { useEffect } from "react";
 
 const nav = [
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
@@ -55,7 +56,15 @@ function avatarUrl(me: Me): string | null {
   return `https://cdn.discordapp.com/avatars/${me.discordId}/${me.avatar}.png?size=32`;
 }
 
-export function Sidebar({ allianceName }: { allianceName?: string }) {
+export function Sidebar({
+  allianceName,
+  open = false,
+  onClose,
+}: {
+  allianceName?: string;
+  open?: boolean;
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
 
   const { data: me } = useQuery<Me | null>({
@@ -67,16 +76,42 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
 
   const isLoggedIn = !!me;
 
+  useEffect(() => {
+    onClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   return (
-    <aside className="w-56 shrink-0 bg-[#161b2e] border-r border-[#2a3150] flex flex-col sticky top-0 h-screen overflow-y-auto">
-      <div className="p-5 border-b border-[#2a3150]">
-        <Link href="/" className="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
-          <Shield size={20} className="text-blue-400" />
-          <span className="font-bold text-white text-sm">PnW Analytics</span>
-        </Link>
-        {allianceName && (
-          <p className="text-xs text-slate-400 truncate">{allianceName}</p>
-        )}
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#161b2e] border-r border-[#2a3150] flex flex-col overflow-y-auto transform transition-transform duration-200 ease-in-out
+          md:sticky md:top-0 md:z-auto md:h-screen md:w-56 md:shrink-0 md:translate-x-0
+          ${open ? "translate-x-0" : "-translate-x-full"}`}
+      >
+      <div className="p-5 border-b border-[#2a3150] flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <Link href="/" className="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
+            <Shield size={20} className="text-blue-400" />
+            <span className="font-bold text-white text-sm">PnW Analytics</span>
+          </Link>
+          {allianceName && (
+            <p className="text-xs text-slate-400 truncate">{allianceName}</p>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="md:hidden text-slate-500 hover:text-white transition-colors shrink-0 p-1"
+          aria-label="Close menu"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
@@ -203,6 +238,7 @@ export function Sidebar({ allianceName }: { allianceName?: string }) {
           </form>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }
