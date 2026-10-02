@@ -12,7 +12,7 @@ export interface GroupTieringRow {
   total: number;
 }
 
-function tierMin(numCities: number, bucketSize: number): number {
+export function tierMin(numCities: number, bucketSize: number): number {
   return Math.floor((numCities - 1) / bucketSize) * bucketSize + 1;
 }
 

@@ -1,10 +1,29 @@
 "use client";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMembers, fetchSyncStatus, Nation } from "@/lib/pnw";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ScatterChart, Scatter, CartesianGrid } from "recharts";
+import { BarChart, Bar, AreaChart, Area, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ScatterChart, Scatter, CartesianGrid } from "recharts";
+import { tierMin, tierLabel } from "@/lib/tiering";
+
+const CITY_BUCKET_SIZES = [1, 5] as const;
+type CityBucketSize = (typeof CITY_BUCKET_SIZES)[number];
+
+function bucketCities(members: Nation[], bucketSize: CityBucketSize): { label: string; count: number }[] {
+  if (members.length === 0) return [];
+  const maxCities = Math.max(...members.map(m => m.num_cities));
+  const rowByMin = new Map<number, { label: string; count: number }>();
+  for (let min = 1; min <= maxCities; min += bucketSize) {
+    rowByMin.set(min, { label: tierLabel(min, bucketSize), count: 0 });
+  }
+  for (const m of members) {
+    const row = rowByMin.get(tierMin(m.num_cities, bucketSize));
+    if (row) row.count += 1;
+  }
+  return [...rowByMin.values()];
+}
 
 const PIE_COLORS = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ec4899", "#14b8a6", "#eab308", "#ef4444"];
 
@@ -37,6 +56,7 @@ export default function ChartsPage() {
     refetchInterval: 10 * 60 * 1000,
   });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
+  const [cityBucketSize, setCityBucketSize] = useState<CityBucketSize>(1);
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
@@ -50,9 +70,7 @@ export default function ChartsPage() {
     range, count: members.filter(m => scoreRange(m.score) === range).length,
   }));
 
-  const cityDist: Record<number, number> = {};
-  for (const m of members) cityDist[m.num_cities] = (cityDist[m.num_cities] ?? 0) + 1;
-  const cityData = Object.entries(cityDist).map(([c, n]) => ({ cities: Number(c), count: n })).sort((a, b) => a.cities - b.cities);
+  const cityData = bucketCities(members, cityBucketSize);
 
   const colorDist: Record<string, number> = {};
   for (const m of members) colorDist[m.color] = (colorDist[m.color] ?? 0) + 1;
@@ -93,14 +111,31 @@ export default function ChartsPage() {
           </div>
 
           <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-300 mb-4">City Count Distribution</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-300">City Count Distribution</h3>
+              <div className="flex items-center gap-1 bg-[#0f1117] border border-[#2a3150] rounded-lg p-0.5">
+                {CITY_BUCKET_SIZES.map(size => (
+                  <button
+                    key={size}
+                    onClick={() => setCityBucketSize(size)}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      cityBucketSize === size ? "bg-green-600 text-white" : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {size === 1 ? "Individual" : "5-City Blocks"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={cityData}>
-                <XAxis dataKey="cities" tick={{ fill: "#64748b", fontSize: 10 }} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
+              <AreaChart data={cityData} margin={{ top: 20 }}>
+                <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 10 }} />
+                <YAxis tick={{ fill: "#64748b", fontSize: 10 }} allowDecimals={false} />
                 <Tooltip {...TS} />
-                <Bar dataKey="count" fill="#22c55e" radius={[4, 4, 0, 0]} name="Members" />
-              </BarChart>
+                <Area type="step" dataKey="count" name="Members" stroke="#22c55e" strokeWidth={2} fill="#22c55e" fillOpacity={0.15}>
+                  <LabelList dataKey="count" position="top" fill="#22c55e" fontSize={11} />
+                </Area>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
 
