@@ -56,7 +56,7 @@ export default function ChartsPage() {
     refetchInterval: 10 * 60 * 1000,
   });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
-  const [cityBucketSize, setCityBucketSize] = useState<CityBucketSize>(1);
+  const [cityBucketSize, setCityBucketSize] = useState<CityBucketSize>(5);
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
