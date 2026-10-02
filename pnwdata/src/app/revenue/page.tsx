@@ -128,9 +128,9 @@ export default function RevenuePage() {
     const map = new Map<string, { actual: number; real: number; safekept: number }>();
     for (const b of brackets) {
       const entry = map.get(b.allianceName) ?? { actual: 0, real: 0, safekept: 0 };
-      entry.actual += b.actualTotalUsd;
-      entry.real += b.realTotalUsd;
-      entry.safekept += b.safekeptTotalUsd;
+      entry.actual += b.actualTotalUsd24h;
+      entry.real += b.realTotalUsd24h;
+      entry.safekept += b.safekeptTotalUsd24h;
       map.set(b.allianceName, entry);
     }
     return [...map.entries()];
@@ -203,18 +203,21 @@ export default function RevenuePage() {
         )}
 
         {byAlliance.length > 1 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {byAlliance.map(([name, t]) => (
-              <div key={name} className="rounded-xl border border-[#2a3150] bg-[#161b2e] p-4">
-                <p className="text-sm font-semibold text-sky-400 mb-2">{name}</p>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div><p className="text-slate-500">Actual</p><p className="text-slate-200 font-medium">{fmt(t.actual)}</p></div>
-                  <div><p className="text-slate-500">Real</p><p className="text-green-400 font-medium">{fmt(t.real)}</p></div>
-                  <div><p className="text-slate-500">Safekept</p><p className="text-yellow-400 font-medium">{fmt(t.safekept)}</p></div>
+          <section>
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">By Alliance (Last 24 Hours)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {byAlliance.map(([name, t]) => (
+                <div key={name} className="rounded-xl border border-[#2a3150] bg-[#161b2e] p-4">
+                  <p className="text-sm font-semibold text-sky-400 mb-2">{name}</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div><p className="text-slate-500">Actual</p><p className="text-slate-200 font-medium">{fmt(t.actual)}</p></div>
+                    <div><p className="text-slate-500">Real</p><p className="text-green-400 font-medium">{fmt(t.real)}</p></div>
+                    <div><p className="text-slate-500">Safekept</p><p className="text-yellow-400 font-medium">{fmt(t.safekept)}</p></div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </section>
         )}
 
         <div>
