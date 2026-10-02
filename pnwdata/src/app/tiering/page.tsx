@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { ExportButton } from "@/components/ExportButton";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { Layers } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, LabelList, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import type { GroupTieringResponse } from "@/app/api/tiering/route";
 import type { TieringDefaults } from "@/app/api/tiering/defaults/route";
 
@@ -198,14 +198,18 @@ export default function TieringPage() {
         {!loading && result && result.rows.length > 0 && (
           <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={result.rows}>
+              <AreaChart data={result.rows} margin={{ top: 20 }}>
                 <XAxis dataKey="tier" tick={{ fill: "#64748b", fontSize: 11 }} />
                 <YAxis tick={{ fill: "#64748b", fontSize: 11 }} allowDecimals={false} />
                 <Tooltip {...TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
-                <Bar dataKey="groupA" name={displayLabelA} fill="#60a5fa" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="groupB" name={displayLabelB} fill="#f87171" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Area type="step" dataKey="groupA" name={displayLabelA} stroke="#60a5fa" strokeWidth={2} fill="#60a5fa" fillOpacity={0.15}>
+                  <LabelList dataKey="groupA" position="top" fill="#60a5fa" fontSize={11} />
+                </Area>
+                <Area type="step" dataKey="groupB" name={displayLabelB} stroke="#f87171" strokeWidth={2} fill="#f87171" fillOpacity={0.15}>
+                  <LabelList dataKey="groupB" position="top" fill="#f87171" fontSize={11} />
+                </Area>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         )}
