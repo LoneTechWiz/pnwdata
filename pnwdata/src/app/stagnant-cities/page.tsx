@@ -9,13 +9,15 @@ import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { ExportButton } from "@/components/ExportButton";
 
+const DEFAULT_TAX_IDS = [72, 27151, 28508, 29989, 29990, 30037, 30065, 30066, 30076];
+
 type SortKey = "nation_name" | "num_cities" | "turnsSinceCity" | "bracket";
 
 export default function StagnantCitiesPage() {
   const [minTurns, setMinTurns] = useState(String(STAGNANT_TURNS));
   const [minCities, setMinCities] = useState("20");
   const [maxCities, setMaxCities] = useState("39");
-  const [selectedTaxIds, setSelectedTaxIds] = useState<number[]>([]);
+  const [selectedTaxIds, setSelectedTaxIds] = useState<number[]>(DEFAULT_TAX_IDS);
   const [sortKey, setSortKey] = useState<SortKey>("num_cities");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -35,7 +37,7 @@ export default function StagnantCitiesPage() {
   const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
 
   const taxIdOptions = useMemo(
-    () => [...new Set(members.map(taxBracketId).filter((id): id is number => id !== null))].sort((a, b) => a - b),
+    () => [...new Set([...DEFAULT_TAX_IDS, ...members.map(taxBracketId).filter((id): id is number => id !== null)])].sort((a, b) => a - b),
     [members],
   );
 
