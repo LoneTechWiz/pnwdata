@@ -11,6 +11,7 @@ export const ADMIN_PAGE_PATHS = [
   "/relink",
   "/inactive",
   "/explore",
+  "/stagnant-cities",
   "/military",
   "/mmr",
   "/wars",

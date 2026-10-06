@@ -20,7 +20,7 @@ interface RoleConfig {
 const ALL_PAGES = [
   "/dashboard", "/members", "/applicants", "/military", "/mmr",
   "/wars", "/cashholders", "/charts",
-  "/inactive", "/explore", "/slots", "/command-center", "/beige-watch", "/raid-finder", "/tiering", "/relink", "/credits", "/recruitment", "/role-config", "/war-config", "/raid-config", "/stockpile-alert-config", "/offshore-config", "/revenue", "/tax-config",
+  "/inactive", "/explore", "/stagnant-cities", "/slots", "/command-center", "/beige-watch", "/raid-finder", "/tiering", "/relink", "/credits", "/recruitment", "/role-config", "/war-config", "/raid-config", "/stockpile-alert-config", "/offshore-config", "/revenue", "/tax-config",
 ];
 
 function roleColor(color: number): string {

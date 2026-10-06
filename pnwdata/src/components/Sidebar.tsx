@@ -23,6 +23,7 @@ const hiddenNav = [
   { label: "Relink", href: "/relink", icon: Link2 },
   { label: "Inactive", href: "/inactive", icon: Clock },
   { label: "Explore", href: "/explore", icon: Search },
+  { label: "Stagnant Cities", href: "/stagnant-cities", icon: Clock },
   // Military & War
   { label: "Military", href: "/military", icon: Shield },
   { label: "MMR Checker", href: "/mmr", icon: Target },
