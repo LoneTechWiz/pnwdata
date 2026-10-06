@@ -13,8 +13,8 @@ type SortKey = "nation_name" | "num_cities" | "turnsSinceCity" | "bracket";
 
 export default function StagnantCitiesPage() {
   const [minTurns, setMinTurns] = useState(String(STAGNANT_TURNS));
-  const [minCities, setMinCities] = useState("");
-  const [maxCities, setMaxCities] = useState("");
+  const [minCities, setMinCities] = useState("20");
+  const [maxCities, setMaxCities] = useState("39");
   const [selectedTaxIds, setSelectedTaxIds] = useState<number[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("num_cities");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
