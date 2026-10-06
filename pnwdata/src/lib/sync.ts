@@ -38,7 +38,7 @@ export const MEMBERS_QUERY = `
     id nation_name leader_name discord score num_cities population color last_active continent
     money coal oil uranium iron bauxite lead gasoline munitions steel aluminum food credits
     soldiers tanks aircraft ships missiles nukes spies
-    vacation_mode_turns beige_turns alliance_position
+    vacation_mode_turns beige_turns alliance_position tax_id
     war_policy domestic_policy offensive_wars_count defensive_wars_count
     cities { date powered infrastructure land barracks factory hangar drydock hospital policestation recycling_center subway }
     mass_irrigation international_trade_center telecommunications_satellite uranium_enrichment_program

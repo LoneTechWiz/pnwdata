@@ -22,6 +22,7 @@ export interface Nation {
   vacation_mode_turns: number;
   beige_turns: number;
   alliance_position: string;
+  tax_id?: string | number;
   war_policy: string;
   domestic_policy: string;
   offensive_wars_count: number;
@@ -215,4 +216,6 @@ export const fetchAlliance = (): Promise<Alliance | null> => apiFetch("alliance"
 export const fetchSyncStatus = (): Promise<SyncStatus> => apiFetch("status");
 export const fetchTradePrices = (): Promise<TradePrice | null> => apiFetch("trade_prices");
 export const fetchGameInfo = (): Promise<GameInfo | null> => apiFetch("game_info");
+/** Tax bracket names keyed by "<allianceId>:<bracketId>". Names only, no rates. */
+export const fetchTaxBracketNames = (): Promise<Record<string, string>> => apiFetch("tax_brackets");
 export const fetchDiscordLinks = (): Promise<Record<string, DiscordNationLink>> => apiFetch("discord_links");

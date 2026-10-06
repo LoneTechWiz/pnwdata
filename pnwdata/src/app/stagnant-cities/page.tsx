@@ -1,15 +1,15 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { fetchMembers, fetchDiscordLinks, fetchSyncStatus } from "@/lib/pnw";
-import { findStagnantNations, STAGNANT_TURNS } from "@/lib/city-stagnation";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus, fetchTaxBracketNames } from "@/lib/pnw";
+import { findStagnantNations, taxBracketLabel, STAGNANT_TURNS } from "@/lib/city-stagnation";
 import { ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { ExportButton } from "@/components/ExportButton";
 
-type SortKey = "nation_name" | "num_cities" | "turnsSinceCity";
+type SortKey = "nation_name" | "num_cities" | "turnsSinceCity" | "bracket";
 
 export default function StagnantCitiesPage() {
   const [minTurns, setMinTurns] = useState(String(STAGNANT_TURNS));
@@ -29,6 +29,7 @@ export default function StagnantCitiesPage() {
     refetchInterval: 10 * 60 * 1000,
   });
   const { data: discordLinks = {} } = useQuery({ queryKey: ["discordLinks"], queryFn: fetchDiscordLinks, refetchInterval: 10 * 60 * 1000 });
+  const { data: bracketNames = {} } = useQuery({ queryKey: ["taxBracketNames"], queryFn: fetchTaxBracketNames, refetchInterval: 10 * 60 * 1000 });
   const { data: status } = useQuery({ queryKey: ["syncStatus"], queryFn: fetchSyncStatus, refetchInterval: 15_000 });
 
   const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
@@ -40,13 +41,13 @@ export default function StagnantCitiesPage() {
     const found = findStagnantNations(members, Number.isNaN(threshold) ? STAGNANT_TURNS : threshold)
       .filter(m => (Number.isNaN(lo) || m.num_cities >= lo) && (Number.isNaN(hi) || m.num_cities <= hi));
     return found.sort((a, b) => {
-      const av = sortKey === "nation_name" ? a.nation_name : a[sortKey];
-      const bv = sortKey === "nation_name" ? b.nation_name : b[sortKey];
+      const av = sortKey === "nation_name" ? a.nation_name : sortKey === "bracket" ? taxBracketLabel(a, bracketNames) : a[sortKey];
+      const bv = sortKey === "nation_name" ? b.nation_name : sortKey === "bracket" ? taxBracketLabel(b, bracketNames) : b[sortKey];
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       const dir = sortDir === "asc" ? cmp : -cmp;
       return dir || b.turnsSinceCity - a.turnsSinceCity;
     });
-  }, [members, minTurns, minCities, maxCities, sortKey, sortDir]);
+  }, [members, minTurns, minCities, maxCities, sortKey, sortDir, bracketNames]);
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
@@ -57,6 +58,7 @@ export default function StagnantCitiesPage() {
   const columns: { key: SortKey; label: string }[] = [
     { key: "nation_name", label: "Nation" },
     { key: "num_cities", label: "Cities" },
+    { key: "bracket", label: "Tax Bracket" },
     { key: "turnsSinceCity", label: "Turns Since Last City" },
   ];
 
@@ -114,6 +116,7 @@ export default function StagnantCitiesPage() {
               Leader: m.leader_name,
               Discord: discordLinks[String(m.id)]?.username ?? "",
               Cities: m.num_cities,
+              "Tax Bracket": taxBracketLabel(m, bracketNames),
               "Turns Since Last City": m.turnsSinceCity,
               "Days Since Last City": Math.floor(m.turnsSinceCity / 12),
             }))}
@@ -169,6 +172,7 @@ export default function StagnantCitiesPage() {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right text-slate-300">{m.num_cities}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-300">{taxBracketLabel(m, bracketNames) || "—"}</td>
                     <td className="px-3 py-2.5 text-right font-medium text-amber-400">
                       {m.turnsSinceCity.toLocaleString()}
                       <span className="text-xs text-slate-500 ml-1">({Math.floor(m.turnsSinceCity / 12)}d)</span>

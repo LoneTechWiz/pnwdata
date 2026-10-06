@@ -25,3 +25,13 @@ export function findStagnantNations<T extends HasCities>(
     return turns !== null && turns > minTurns ? [{ ...n, turnsSinceCity: turns }] : [];
   });
 }
+
+/** Display name for a nation's tax bracket, or "" when it has none or hasn't synced one yet. */
+export function taxBracketLabel(
+  nation: { alliance_id?: number; tax_id?: string | number },
+  names: Record<string, string>,
+): string {
+  const id = Number(nation.tax_id);
+  if (!id) return "";
+  return names[`${nation.alliance_id}:${id}`] ?? `Bracket #${id}`;
+}

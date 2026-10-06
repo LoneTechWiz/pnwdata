@@ -39,6 +39,10 @@ export async function GET(request: NextRequest) {
       );
       return NextResponse.json(links);
     }
+    case "tax_brackets": {
+      const rows = db.prepare("SELECT alliance_id, bracket_id, bracket_name FROM tax_bracket_config").all() as Array<{ alliance_id: number; bracket_id: number; bracket_name: string }>;
+      return NextResponse.json(Object.fromEntries(rows.map((row) => [`${row.alliance_id}:${row.bracket_id}`, row.bracket_name])));
+    }
     default:
       return NextResponse.json({ error: "Unknown type" }, { status: 400 });
   }
