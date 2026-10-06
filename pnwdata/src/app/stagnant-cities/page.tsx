@@ -15,6 +15,7 @@ export default function StagnantCitiesPage() {
   const [minTurns, setMinTurns] = useState(String(STAGNANT_TURNS));
   const [minCities, setMinCities] = useState("");
   const [maxCities, setMaxCities] = useState("");
+  const [selectedTaxIds, setSelectedTaxIds] = useState<number[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("num_cities");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -33,12 +34,22 @@ export default function StagnantCitiesPage() {
 
   const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
 
+  const taxIdOptions = useMemo(
+    () => [...new Set(members.map(taxBracketId).filter((id): id is number => id !== null))].sort((a, b) => a - b),
+    [members],
+  );
+
+  function toggleTaxId(id: number) {
+    setSelectedTaxIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
   const rows = useMemo(() => {
     const threshold = parseInt(minTurns, 10);
     const lo = parseInt(minCities, 10);
     const hi = parseInt(maxCities, 10);
     const found = findStagnantNations(members, Number.isNaN(threshold) ? STAGNANT_TURNS : threshold)
-      .filter(m => (Number.isNaN(lo) || m.num_cities >= lo) && (Number.isNaN(hi) || m.num_cities <= hi));
+      .filter(m => (Number.isNaN(lo) || m.num_cities >= lo) && (Number.isNaN(hi) || m.num_cities <= hi))
+      .filter(m => selectedTaxIds.length === 0 || selectedTaxIds.includes(taxBracketId(m) ?? -1));
     return found.sort((a, b) => {
       const av = sortKey === "nation_name" ? a.nation_name : sortKey === "bracket" ? taxBracketId(a) ?? 0 : a[sortKey];
       const bv = sortKey === "nation_name" ? b.nation_name : sortKey === "bracket" ? taxBracketId(b) ?? 0 : b[sortKey];
@@ -46,7 +57,7 @@ export default function StagnantCitiesPage() {
       const dir = sortDir === "asc" ? cmp : -cmp;
       return dir || b.turnsSinceCity - a.turnsSinceCity;
     });
-  }, [members, minTurns, minCities, maxCities, sortKey, sortDir]);
+  }, [members, minTurns, minCities, maxCities, selectedTaxIds, sortKey, sortDir]);
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
@@ -102,6 +113,43 @@ export default function StagnantCitiesPage() {
               />
             </div>
           </div>
+          {taxIdOptions.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-xs font-medium text-slate-400">Tax ID</span>
+                <span className="text-xs text-slate-500">
+                  {selectedTaxIds.length === 0 ? "all" : `${selectedTaxIds.length} selected`}
+                </span>
+                {selectedTaxIds.length > 0 && (
+                  <button
+                    onClick={() => setSelectedTaxIds([])}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {taxIdOptions.map(id => {
+                  const on = selectedTaxIds.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => toggleTaxId(id)}
+                      aria-pressed={on}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                        on
+                          ? "bg-blue-500/20 border-blue-500 text-blue-300"
+                          : "bg-[#0f1117] border-[#2a3150] text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {id}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between flex-wrap gap-3">
