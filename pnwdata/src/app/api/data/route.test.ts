@@ -36,15 +36,6 @@ describe("GET /api/data", () => {
     ]);
   });
 
-  it("returns tax bracket names keyed by alliance and bracket id", async () => {
-    mocks.prepare.mockReturnValue({
-      all: () => [{ alliance_id: 1, bracket_id: 5, bracket_name: "Core" }],
-    });
-    const res = await GET(request("tax_brackets"));
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ "1:5": "Core" });
-  });
-
   it("returns the merged war list for type=wars", async () => {
     const res = await GET(request("wars"));
     expect(res.status).toBe(200);

@@ -26,12 +26,8 @@ export function findStagnantNations<T extends HasCities>(
   });
 }
 
-/** Display name for a nation's tax bracket, or "" when it has none or hasn't synced one yet. */
-export function taxBracketLabel(
-  nation: { alliance_id?: number; tax_id?: string | number },
-  names: Record<string, string>,
-): string {
+/** A nation's tax bracket ID, or null when it has none or hasn't synced one yet. */
+export function taxBracketId(nation: { tax_id?: string | number }): number | null {
   const id = Number(nation.tax_id);
-  if (!id) return "";
-  return names[`${nation.alliance_id}:${id}`] ?? `Bracket #${id}`;
+  return id > 0 ? id : null;
 }
