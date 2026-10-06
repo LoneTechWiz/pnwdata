@@ -13,6 +13,8 @@ type SortKey = "nation_name" | "num_cities" | "turnsSinceCity";
 
 export default function StagnantCitiesPage() {
   const [minTurns, setMinTurns] = useState(String(STAGNANT_TURNS));
+  const [minCities, setMinCities] = useState("");
+  const [maxCities, setMaxCities] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("num_cities");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -33,7 +35,10 @@ export default function StagnantCitiesPage() {
 
   const rows = useMemo(() => {
     const threshold = parseInt(minTurns, 10);
-    const found = findStagnantNations(members, Number.isNaN(threshold) ? STAGNANT_TURNS : threshold);
+    const lo = parseInt(minCities, 10);
+    const hi = parseInt(maxCities, 10);
+    const found = findStagnantNations(members, Number.isNaN(threshold) ? STAGNANT_TURNS : threshold)
+      .filter(m => (Number.isNaN(lo) || m.num_cities >= lo) && (Number.isNaN(hi) || m.num_cities <= hi));
     return found.sort((a, b) => {
       const av = sortKey === "nation_name" ? a.nation_name : a[sortKey];
       const bv = sortKey === "nation_name" ? b.nation_name : b[sortKey];
@@ -41,7 +46,7 @@ export default function StagnantCitiesPage() {
       const dir = sortDir === "asc" ? cmp : -cmp;
       return dir || b.turnsSinceCity - a.turnsSinceCity;
     });
-  }, [members, minTurns, sortKey, sortDir]);
+  }, [members, minTurns, minCities, maxCities, sortKey, sortDir]);
 
   if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
@@ -63,15 +68,39 @@ export default function StagnantCitiesPage() {
           <p className="text-slate-400 text-sm">Nations that have gone more than the set number of turns (2 hours each) without building a city</p>
         </div>
 
-        <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4 max-w-xs">
-          <label className="block text-xs font-medium mb-1 text-slate-400">Minimum turns since last city</label>
-          <input
-            type="number"
-            min="0"
-            value={minTurns}
-            onChange={e => setMinTurns(e.target.value)}
-            className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-          />
+        <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl">
+            <div>
+              <label className="block text-xs font-medium mb-1 text-slate-400">Minimum turns since last city</label>
+              <input
+                type="number"
+                min="0"
+                value={minTurns}
+                onChange={e => setMinTurns(e.target.value)}
+                className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-slate-400">Min cities</label>
+              <input
+                type="number"
+                min="0"
+                placeholder="any" value={minCities}
+                onChange={e => setMinCities(e.target.value)}
+                className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-slate-400">Max cities</label>
+              <input
+                type="number"
+                min="0"
+                placeholder="any" value={maxCities}
+                onChange={e => setMaxCities(e.target.value)}
+                className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-between flex-wrap gap-3">
