@@ -133,6 +133,7 @@ The sidebar has three tiers:
 | `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
 | `/raid-finder` | Local raid target ranking using inactivity, beige loot, GNI snapshots, and visible bank records |
 | `/raid-config` | Admin UI for the minimum raid inactivity threshold |
+| `/stagnant-cities-config` | Admin UI for the Stagnant Cities page's default filters (min turns, city range, tax IDs, excluded city counts); stored in the `stagnant-cities-config` `app_config` row, falling back to built-in defaults when unset (canManage only) |
 | `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
 | `/war-config` | Admin UI to manage enemy/ally alliance IDs in SQLite (canManageRoles only) |
 | `/offshore-config` | Lets any logged-in member submit a P&W API key for an offshore or extension alliance; the app verifies it, detects the alliance automatically, and syncs the same member/war/bank data it tracks for the main alliance. Visible to Emperors and to any role granted access via `/role-config` |

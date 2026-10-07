@@ -179,6 +179,15 @@ export function Sidebar({
               Raid Config
             </Link>
             <Link
+              href="/stagnant-cities-config"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                pathname === "/stagnant-cities-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+              }`}
+            >
+              <Layers size={16} />
+              Stagnant Cities Config
+            </Link>
+            <Link
               href="/stockpile-alert-config"
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                 pathname === "/stockpile-alert-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"

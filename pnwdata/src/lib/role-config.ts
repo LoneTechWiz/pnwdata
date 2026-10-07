@@ -27,6 +27,7 @@ export const ADMIN_PAGE_PATHS = [
   "/role-config",
   "/war-config",
   "/raid-config",
+  "/stagnant-cities-config",
   "/stockpile-alert-config",
   "/offshore-config",
   "/revenue",

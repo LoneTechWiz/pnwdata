@@ -1,23 +1,30 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { fetchMembers, fetchDiscordLinks, fetchSyncStatus } from "@/lib/pnw";
-import { findStagnantNations, taxBracketId, STAGNANT_TURNS } from "@/lib/city-stagnation";
+import { fetchMembers, fetchDiscordLinks, fetchSyncStatus, fetchStagnantCitiesConfig } from "@/lib/pnw";
+import { STAGNANT_DEFAULTS } from "@/lib/stagnant-config";
+import { findStagnantNations, taxBracketId } from "@/lib/city-stagnation";
 import { ArrowUpDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import { SyncingPlaceholder } from "@/components/SyncingPlaceholder";
 import { ExportButton } from "@/components/ExportButton";
 
-const DEFAULT_TAX_IDS = [72, 27151, 28508, 29989, 29990, 30037, 30065, 30066, 30076];
+interface FilterDraft {
+  minTurns?: string;
+  minCities?: string;
+  maxCities?: string;
+  taxIds?: number[];
+  excludedCities?: number[];
+}
+
+const MAX_CITY_CHIPS = 100;
 
 type SortKey = "nation_name" | "num_cities" | "turnsSinceCity" | "bracket";
 
 export default function StagnantCitiesPage() {
-  const [minTurns, setMinTurns] = useState(String(STAGNANT_TURNS));
-  const [minCities, setMinCities] = useState("20");
-  const [maxCities, setMaxCities] = useState("39");
-  const [selectedTaxIds, setSelectedTaxIds] = useState<number[]>(DEFAULT_TAX_IDS);
+  // Filters start from the saved defaults; anything the user changes is kept in `draft`.
+  const [draft, setDraft] = useState<FilterDraft>({});
   const [sortKey, setSortKey] = useState<SortKey>("num_cities");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -25,6 +32,16 @@ export default function StagnantCitiesPage() {
     if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("desc"); }
   }
+
+  const { data: config = STAGNANT_DEFAULTS, isLoading: configLoading } = useQuery({
+    queryKey: ["stagnantCitiesConfig"],
+    queryFn: fetchStagnantCitiesConfig,
+  });
+  const minTurns = draft.minTurns ?? String(config.min_turns);
+  const minCities = draft.minCities ?? (config.min_cities === null ? "" : String(config.min_cities));
+  const maxCities = draft.maxCities ?? (config.max_cities === null ? "" : String(config.max_cities));
+  const selectedTaxIds = draft.taxIds ?? config.tax_ids;
+  const excludedCities = draft.excludedCities ?? config.excluded_cities;
 
   const { data: members = [], isLoading, error } = useQuery({
     queryKey: ["members"],
@@ -37,31 +54,56 @@ export default function StagnantCitiesPage() {
   const showAllianceTag = new Set(members.map(m => m.alliance_name).filter(Boolean)).size > 1;
 
   const taxIdOptions = useMemo(
-    () => [...new Set([...DEFAULT_TAX_IDS, ...members.map(taxBracketId).filter((id): id is number => id !== null)])].sort((a, b) => a - b),
-    [members],
+    () => [...new Set([...config.tax_ids, ...members.map(taxBracketId).filter((id): id is number => id !== null)])].sort((a, b) => a - b),
+    [members, config.tax_ids],
   );
 
   function toggleTaxId(id: number) {
-    setSelectedTaxIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setDraft(prev => {
+      const current = prev.taxIds ?? config.tax_ids;
+      return { ...prev, taxIds: current.includes(id) ? current.filter(x => x !== id) : [...current, id] };
+    });
   }
 
-  const rows = useMemo(() => {
+  function toggleCity(count: number) {
+    setDraft(prev => {
+      const current = prev.excludedCities ?? config.excluded_cities;
+      return { ...prev, excludedCities: current.includes(count) ? current.filter(x => x !== count) : [...current, count] };
+    });
+  }
+
+  const stagnant = useMemo(() => {
     const threshold = parseInt(minTurns, 10);
-    const lo = parseInt(minCities, 10);
-    const hi = parseInt(maxCities, 10);
-    const found = findStagnantNations(members, Number.isNaN(threshold) ? STAGNANT_TURNS : threshold)
+    return findStagnantNations(members, Number.isNaN(threshold) ? config.min_turns : threshold);
+  }, [members, minTurns, config.min_turns]);
+
+  const lo = parseInt(minCities, 10);
+  const hi = parseInt(maxCities, 10);
+
+  // One toggle per city count in the range. With an open-ended range, only counts that exist are offered.
+  const cityOptions = useMemo(() => {
+    const present = [...new Set(stagnant.map(m => m.num_cities))].sort((a, b) => a - b);
+    if (!Number.isNaN(lo) && !Number.isNaN(hi)) {
+      return Array.from({ length: Math.max(0, Math.min(hi - lo + 1, MAX_CITY_CHIPS)) }, (_, i) => lo + i);
+    }
+    return present.filter(c => (Number.isNaN(lo) || c >= lo) && (Number.isNaN(hi) || c <= hi)).slice(0, MAX_CITY_CHIPS);
+  }, [stagnant, lo, hi]);
+
+  const rows = useMemo(() => {
+    const found = stagnant
       .filter(m => (Number.isNaN(lo) || m.num_cities >= lo) && (Number.isNaN(hi) || m.num_cities <= hi))
+      .filter(m => !excludedCities.includes(m.num_cities))
       .filter(m => selectedTaxIds.length === 0 || selectedTaxIds.includes(taxBracketId(m) ?? -1));
-    return found.sort((a, b) => {
+    return [...found].sort((a, b) => {
       const av = sortKey === "nation_name" ? a.nation_name : sortKey === "bracket" ? taxBracketId(a) ?? 0 : a[sortKey];
       const bv = sortKey === "nation_name" ? b.nation_name : sortKey === "bracket" ? taxBracketId(b) ?? 0 : b[sortKey];
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       const dir = sortDir === "asc" ? cmp : -cmp;
       return dir || b.turnsSinceCity - a.turnsSinceCity;
     });
-  }, [members, minTurns, minCities, maxCities, selectedTaxIds, sortKey, sortDir]);
+  }, [stagnant, lo, hi, excludedCities, selectedTaxIds, sortKey, sortDir]);
 
-  if (isLoading) return <AppShell><LoadingSpinner /></AppShell>;
+  if (isLoading || configLoading) return <AppShell><LoadingSpinner /></AppShell>;
   if (error) return <AppShell><ErrorMessage message={(error as Error).message} /></AppShell>;
   if (members.length === 0 && (status?.status === "never" || status?.status === "syncing")) {
     return <AppShell><SyncingPlaceholder /></AppShell>;
@@ -90,7 +132,7 @@ export default function StagnantCitiesPage() {
                 type="number"
                 min="0"
                 value={minTurns}
-                onChange={e => setMinTurns(e.target.value)}
+                onChange={e => setDraft(prev => ({ ...prev, minTurns: e.target.value }))}
                 className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -100,7 +142,7 @@ export default function StagnantCitiesPage() {
                 type="number"
                 min="0"
                 placeholder="any" value={minCities}
-                onChange={e => setMinCities(e.target.value)}
+                onChange={e => setDraft(prev => ({ ...prev, minCities: e.target.value }))}
                 className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -110,11 +152,50 @@ export default function StagnantCitiesPage() {
                 type="number"
                 min="0"
                 placeholder="any" value={maxCities}
-                onChange={e => setMaxCities(e.target.value)}
+                onChange={e => setDraft(prev => ({ ...prev, maxCities: e.target.value }))}
                 className="w-full bg-[#0f1117] border border-[#2a3150] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
+          {cityOptions.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-xs font-medium text-slate-400">Cities included</span>
+                <span className="text-xs text-slate-500">
+                  {excludedCities.some(c => cityOptions.includes(c))
+                    ? `${cityOptions.filter(c => excludedCities.includes(c)).length} left out`
+                    : "all"}
+                </span>
+                {excludedCities.length > 0 && (
+                  <button
+                    onClick={() => setDraft(prev => ({ ...prev, excludedCities: [] }))}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Include all
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {cityOptions.map(count => {
+                  const excluded = excludedCities.includes(count);
+                  return (
+                    <button
+                      key={count}
+                      onClick={() => toggleCity(count)}
+                      aria-pressed={!excluded}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                        excluded
+                          ? "bg-[#0f1117] border-[#2a3150] text-slate-600 line-through hover:text-slate-400"
+                          : "bg-blue-500/20 border-blue-500 text-blue-300"
+                      }`}
+                    >
+                      {count}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {taxIdOptions.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center gap-3 mb-2">
@@ -124,7 +205,7 @@ export default function StagnantCitiesPage() {
                 </span>
                 {selectedTaxIds.length > 0 && (
                   <button
-                    onClick={() => setSelectedTaxIds([])}
+                    onClick={() => setDraft(prev => ({ ...prev, taxIds: [] }))}
                     className="text-xs text-blue-400 hover:text-blue-300"
                   >
                     Clear

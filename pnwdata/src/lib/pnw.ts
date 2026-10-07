@@ -229,3 +229,9 @@ export async function fetchAllianceRankings(): Promise<AllianceRankings> {
   if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
   return json;
 }
+
+export async function fetchStagnantCitiesConfig(): Promise<import("./stagnant-config").StagnantCitiesConfig> {
+  const res = await fetch("/api/stagnant-cities-config");
+  if (!res.ok) throw new Error(`Failed to load Stagnant Cities defaults (${res.status})`);
+  return res.json();
+}

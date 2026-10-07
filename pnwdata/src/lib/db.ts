@@ -275,6 +275,7 @@ if (storedRoleConfig) {
     const pages = config.pages ?? {};
     pages["/raid-finder"] ??= pages["/ai-targets"] ?? pages["/beige-watch"] ?? [];
     pages["/raid-config"] ??= pages["/role-config"] ?? [];
+    pages["/stagnant-cities-config"] ??= pages["/role-config"] ?? [];
     for (const retiredPath of ["/ai-targets", "/optimizer", "/infra", "/bank"]) {
       delete pages[retiredPath];
     }
