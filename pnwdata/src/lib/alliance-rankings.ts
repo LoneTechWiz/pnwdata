@@ -1,5 +1,10 @@
 export const LINK_TREATY_TYPES = ["Extension", "Offshore"] as const;
 
+/** Members of an alliance: everyone except applicants. Vacation mode nations count. */
+export function countMembers(nations: Array<{ alliance_position: string }>): number {
+  return nations.filter((nation) => nation.alliance_position !== "APPLICANT").length;
+}
+
 export interface RawTreaty {
   treaty_type: string;
   approved: boolean;

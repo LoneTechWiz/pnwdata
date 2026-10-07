@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAllianceGroups, type RawAlliance } from "./alliance-rankings";
+import { buildAllianceGroups, countMembers, type RawAlliance } from "./alliance-rankings";
 
 function alliance(id: number, score: number, treaties: RawAlliance["treaties"] = [], nations = 10): RawAlliance {
   return { id, name: `A${id}`, acronym: null, score, rank: 0, nation_count: nations, treaties };
@@ -63,5 +63,18 @@ describe("buildAllianceGroups", () => {
       2,
     );
     expect(groups.map((g) => [g.rank, g.mainId, g.totalScore])).toEqual([[1, 2, 550], [2, 1, 500]]);
+  });
+});
+
+describe("countMembers", () => {
+  it("excludes applicants but keeps every other position", () => {
+    const nations = [
+      { alliance_position: "APPLICANT" },
+      { alliance_position: "APPLICANT" },
+      { alliance_position: "MEMBER" },
+      { alliance_position: "LEADER" },
+      { alliance_position: "HEIR" },
+    ];
+    expect(countMembers(nations)).toBe(3);
   });
 });

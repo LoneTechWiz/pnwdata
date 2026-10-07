@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { gql } from "@/lib/sync";
-import { buildAllianceGroups, type AllianceGroup, type RawAlliance } from "@/lib/alliance-rankings";
+import { buildAllianceGroups, countMembers, type AllianceGroup, type RawAlliance } from "@/lib/alliance-rankings";
 
 export const dynamic = "force-dynamic";
 
@@ -9,14 +9,14 @@ const CACHE_MS = 10 * 60 * 1000;
 const ALLIANCES_QUERY = `
   query($page:Int) { alliances(first:100, page:$page, orderBy:{column:SCORE, order:DESC}) {
     paginatorInfo { hasMorePages }
-    data { id name acronym score rank nations { id } treaties { treaty_type approved alliance1_id alliance2_id } }
+    data { id name acronym score rank nations { alliance_position } treaties { treaty_type approved alliance1_id alliance2_id } }
   } }
 `;
 
 interface AlliancesPage {
   alliances: {
     paginatorInfo: { hasMorePages: boolean };
-    data: Array<Omit<RawAlliance, "nation_count"> & { nations: Array<{ id: string }> }>;
+    data: Array<Omit<RawAlliance, "nation_count"> & { nations: Array<{ alliance_position: string }> }>;
   };
 }
 
@@ -43,7 +43,7 @@ async function loadRankings(): Promise<Rankings> {
   for (let page = 1; page <= 20; page++) {
     const result = await fetchPage(page);
     for (const { nations, ...alliance } of result.alliances.data) {
-      alliances.push({ ...alliance, nation_count: nations.length });
+      alliances.push({ ...alliance, nation_count: countMembers(nations) });
     }
     if (!result.alliances.paginatorInfo.hasMorePages) break;
   }
