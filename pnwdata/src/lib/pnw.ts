@@ -217,3 +217,15 @@ export const fetchSyncStatus = (): Promise<SyncStatus> => apiFetch("status");
 export const fetchTradePrices = (): Promise<TradePrice | null> => apiFetch("trade_prices");
 export const fetchGameInfo = (): Promise<GameInfo | null> => apiFetch("game_info");
 export const fetchDiscordLinks = (): Promise<Record<string, DiscordNationLink>> => apiFetch("discord_links");
+
+export interface AllianceRankings {
+  fetchedAt: number;
+  groups: import("./alliance-rankings").AllianceGroup[];
+}
+
+export async function fetchAllianceRankings(): Promise<AllianceRankings> {
+  const res = await fetch("/api/alliance-rankings");
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+  return json;
+}

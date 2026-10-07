@@ -23,6 +23,7 @@ export const ADMIN_PAGE_PATHS = [
   "/cashholders",
   "/credits",
   "/recruitment",
+  "/alliance-rankings",
   "/role-config",
   "/war-config",
   "/raid-config",

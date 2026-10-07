@@ -39,6 +39,7 @@ const hiddenNav = [
   { label: "Revenue", href: "/revenue", icon: Wallet },
   // Intel
   { label: "Recruitment", href: "/recruitment", icon: Trophy },
+  { label: "Alliance Rankings", href: "/alliance-rankings", icon: Landmark },
   // Offshore
   { label: "Offshore Config", href: "/offshore-config", icon: Landmark },
 ];

@@ -128,6 +128,7 @@ The sidebar has three tiers:
 | `/relink` | Members whose nation ID is missing from Discord server nicknames |
 | `/explore` | Explore nations |
 | `/stagnant-cities` | Nations with more than N (default 120) turns since their newest city (from per-city `date`), sorted by city count, with CSV/Excel export |
+| `/alliance-rankings` | Top 20 alliances by combined score, grouping alliances linked by approved Extension/Offshore treaties under the largest alliance they're linked to; live from the PnW API (10-min server cache), with Excel export |
 | `/command-center` | Per-nation war viewer — select a member to see their active wars with resistance/points/unit counts |
 | `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
 | `/raid-finder` | Local raid target ranking using inactivity, beige loot, GNI snapshots, and visible bank records |
