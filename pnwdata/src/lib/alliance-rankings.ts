@@ -51,8 +51,10 @@ export interface AllianceGroup {
  * partner by score (never to a smaller one). The largest alliance in a chain becomes the group's
  * main alliance. Attaching to one partner keeps a shared offshore from merging two big alliances.
  */
-export function buildAllianceGroups(alliances: RawAlliance[], limit = 20): AllianceGroup[] {
-  const byId = new Map(alliances.map((a) => [Number(a.id), a]));
+export function buildAllianceGroups(input: RawAlliance[], limit = 20): AllianceGroup[] {
+  // Paged API results can repeat an alliance, so keep one entry per id.
+  const byId = new Map(input.map((a) => [Number(a.id), a]));
+  const alliances = [...byId.values()];
   const linkTypes = new Set<string>(LINK_TREATY_TYPES);
 
   const links = new Map<number, Map<number, string>>();

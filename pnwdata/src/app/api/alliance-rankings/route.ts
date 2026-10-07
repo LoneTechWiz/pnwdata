@@ -7,15 +7,15 @@ export const dynamic = "force-dynamic";
 const CACHE_MS = 10 * 60 * 1000;
 
 const ALLIANCES_QUERY = `
-  query($page:Int) { alliances(first:100, page:$page, orderBy:{column:SCORE, order:DESC}) {
-    paginatorInfo { hasMorePages }
+  query($page:Int) { alliances(first:100, page:$page, orderBy:[{column:SCORE, order:DESC}, {column:ID, order:ASC}]) {
+    paginatorInfo { hasMorePages total }
     data { id name acronym score rank nations { alliance_position } treaties { treaty_type approved alliance1_id alliance2_id } }
   } }
 `;
 
 interface AlliancesPage {
   alliances: {
-    paginatorInfo: { hasMorePages: boolean };
+    paginatorInfo: { hasMorePages: boolean; total: number };
     data: Array<Omit<RawAlliance, "nation_count"> & { nations: Array<{ alliance_position: string }> }>;
   };
 }
@@ -38,16 +38,26 @@ async function fetchPage(page: number): Promise<AlliancesPage> {
   }
 }
 
-async function loadRankings(): Promise<Rankings> {
-  const alliances: RawAlliance[] = [];
+async function fetchAllAlliances(): Promise<{ alliances: Map<number, RawAlliance>; total: number }> {
+  const alliances = new Map<number, RawAlliance>();
+  let total = 0;
   for (let page = 1; page <= 20; page++) {
     const result = await fetchPage(page);
+    total = result.alliances.paginatorInfo.total;
     for (const { nations, ...alliance } of result.alliances.data) {
-      alliances.push({ ...alliance, nation_count: countMembers(nations) });
+      alliances.set(Number(alliance.id), { ...alliance, nation_count: countMembers(nations) });
     }
     if (!result.alliances.paginatorInfo.hasMorePages) break;
   }
-  return { fetchedAt: Date.now(), groups: buildAllianceGroups(alliances, 20) };
+  return { alliances, total };
+}
+
+async function loadRankings(): Promise<Rankings> {
+  // Alliances can shift between pages while we read them, repeating some and skipping others,
+  // so retry once if the unique count doesn't match what the API says exists.
+  let result = await fetchAllAlliances();
+  if (result.alliances.size !== result.total) result = await fetchAllAlliances();
+  return { fetchedAt: Date.now(), groups: buildAllianceGroups([...result.alliances.values()], 20) };
 }
 
 export async function GET() {

@@ -57,6 +57,15 @@ describe("buildAllianceGroups", () => {
     expect(groups[0].members).toHaveLength(1);
   });
 
+  it("counts an alliance once even if the input repeats it", () => {
+    const main = alliance(1, 1000, [treaty("Extension", 1, 2)]);
+    const linked = alliance(2, 100, [treaty("Extension", 1, 2)]);
+    const [group] = buildAllianceGroups([main, linked, linked, main]);
+    expect(group.members.map((m) => m.id)).toEqual([1, 2]);
+    expect(group.totalScore).toBe(1100);
+    expect(group.totalNations).toBe(20);
+  });
+
   it("ranks by combined score and limits the result", () => {
     const groups = buildAllianceGroups(
       [alliance(1, 500), alliance(2, 300, [treaty("Extension", 2, 3)]), alliance(3, 250), alliance(4, 100)],
