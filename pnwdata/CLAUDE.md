@@ -67,6 +67,7 @@ Snapshot rows store JSON text in a `data TEXT` column alongside an `updated_at I
 - `bankrecs` — last 500 bank records (upserted)
 - `alliance_meta` — single row (id=1) with alliance stats
 - `trade_prices` — single row (id=1) with 24h average market prices
+- `trade_price_history` — one row per P&W trade price snapshot (`price_id` PK, `recorded_at`, JSON `data`); `INSERT OR IGNORE`d each sync (which also backfills the last 100 snapshots) and pruned to 30 days
 - `discord_nation_links` — nation-to-Discord mappings derived from server nicknames by `darth-protocol`
 - `game_info` — single row (id=1) with radiation levels per continent
 - `sync_status` — single row (id=1) tracking last sync time, status, counts
@@ -129,15 +130,18 @@ The sidebar has three tiers:
 | `/explore` | Explore nations |
 | `/stagnant-cities` | Nations with more than N (default 120) turns since their newest city (from per-city `date`), sorted by city count, with CSV/Excel export |
 | `/alliance-rankings` | Top 20 alliances by combined score, grouping alliances linked by approved Extension/Offshore treaties under the largest alliance they're linked to; live from the PnW API (10-min server cache), with Excel export |
+| `/alliance-spheres` | Compares user-defined spheres of alliances: combined score, share of all alliance score, nations, and each sphere's alliances; live from the PnW API (shared 10-min cache), with Excel export |
 | `/command-center` | Per-nation war viewer — select a member to see their active wars with resistance/points/unit counts |
 | `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
 | `/raid-finder` | Local raid target ranking using inactivity, beige loot, GNI snapshots, and visible bank records |
 | `/raid-config` | Admin UI for the minimum raid inactivity threshold |
 | `/stagnant-cities-config` | Admin UI for the Stagnant Cities page's default filters (min turns, city range, tax IDs, excluded city counts); stored in the `stagnant-cities-config` `app_config` row, falling back to built-in defaults when unset (canManage only) |
+| `/alliance-spheres-config` | Admin UI to set the number of spheres, name them, and assign alliances from the top 50 (one sphere each); stored in the `alliance-spheres-config` `app_config` row (canManage only) |
 | `/role-config` | Admin UI to assign Discord roles to page access (canManageRoles only) |
 | `/war-config` | Admin UI to manage enemy/ally alliance IDs in SQLite (canManageRoles only) |
 | `/offshore-config` | Lets any logged-in member submit a P&W API key for an offshore or extension alliance; the app verifies it, detects the alliance automatically, and syncs the same member/war/bank data it tracks for the main alliance. Visible to Emperors and to any role granted access via `/role-config` |
 | `/revenue` | Actual tax collected vs. real alliance revenue vs. member safekept amount, per bracket and per alliance (main + offshore) |
+| `/trade-prices` | Current 24h average price per resource with change vs 24h ago, plus a price-history line chart (24h/7d/30d) per resource and CSV export |
 | `/tax-config` | Admin UI to set the real rate per P&W tax bracket (capped at the bracket's nominal rate); e.g. a bracket nominally at 100/100 with a real rate of 20/20 means 80% of what's collected is member safekeep, not alliance revenue |
 
 ### External APIs

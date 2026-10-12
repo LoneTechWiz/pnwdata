@@ -26,6 +26,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(readJsonSingleton("alliance_meta"));
     case "trade_prices":
       return NextResponse.json(readJsonSingleton("trade_prices"));
+    case "trade_price_history": {
+      const rows = db.prepare("SELECT data FROM trade_price_history ORDER BY recorded_at ASC").all() as { data: string }[];
+      return NextResponse.json(rows.map((row) => JSON.parse(row.data)));
+    }
     case "game_info":
       return NextResponse.json(readJsonSingleton("game_info"));
     case "status": {

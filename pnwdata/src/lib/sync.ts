@@ -83,7 +83,7 @@ export const TAX_QUERY = `
 `;
 
 const TRADE_PRICES_QUERY = `
-  { tradeprices(first:1) { data {
+  { tradeprices(first:100) { data {
     id date coal oil uranium iron bauxite lead gasoline munitions steel aluminum food credits
   } } }
 `;
@@ -168,6 +168,16 @@ export async function sync(): Promise<void> {
         db.prepare("INSERT OR REPLACE INTO trade_prices (id, data, updated_at) VALUES (1, ?, ?)")
           .run(JSON.stringify(latestPrice), now);
       }
+
+      // Keep a rolling history (INSERT OR IGNORE: the first fetch also backfills recent snapshots).
+      const insertPriceHistory = db.prepare(
+        "INSERT OR IGNORE INTO trade_price_history (price_id, recorded_at, data) VALUES (?, ?, ?)",
+      );
+      for (const price of tradePricesData.tradeprices.data as Array<{ id: number | string; date: string }>) {
+        const recordedAt = Date.parse(price.date);
+        insertPriceHistory.run(Number(price.id), Number.isNaN(recordedAt) ? now : recordedAt, JSON.stringify(price));
+      }
+      db.prepare("DELETE FROM trade_price_history WHERE recorded_at < ?").run(now - 30 * 24 * 60 * 60 * 1000);
 
       db.prepare("INSERT OR REPLACE INTO game_info (id, data, updated_at) VALUES (1, ?, ?)")
         .run(JSON.stringify(gameInfoData.game_info), now);

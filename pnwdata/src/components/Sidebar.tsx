@@ -5,44 +5,83 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, BarChart2, Shield,
   Search, Clock, Target, UserPlus,
-  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt, X,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt, Network, TrendingUp, ChevronDown, X,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const nav = [
   { label: "War Targets", href: "/war-targets", icon: Crosshair },
 ];
 
-const hiddenNav = [
-  // Overview
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Charts", href: "/charts", icon: BarChart2 },
-  // Members
-  { label: "Members", href: "/members", icon: Users },
-  { label: "Applicants", href: "/applicants", icon: UserPlus },
-  { label: "Relink", href: "/relink", icon: Link2 },
-  { label: "Inactive", href: "/inactive", icon: Clock },
-  { label: "Explore", href: "/explore", icon: Search },
-  { label: "Stagnant Cities", href: "/stagnant-cities", icon: Clock },
-  // Military & War
-  { label: "Military", href: "/military", icon: Shield },
-  { label: "MMR Checker", href: "/mmr", icon: Target },
-  { label: "Wars", href: "/wars", icon: Swords },
-  { label: "Need to Declare", href: "/slots", icon: Swords },
-  { label: "Command Center", href: "/command-center", icon: Radio },
-  { label: "Beige Watch", href: "/beige-watch", icon: ShieldOff },
-  { label: "Raid Finder", href: "/raid-finder", icon: Crosshair },
-  { label: "Tiering", href: "/tiering", icon: Layers },
-  // Economy
-  { label: "Stockpile", href: "/cashholders", icon: DollarSign },
-  { label: "Credits", href: "/credits", icon: Coins },
-  { label: "Revenue", href: "/revenue", icon: Wallet },
-  // Intel
-  { label: "Recruitment", href: "/recruitment", icon: Trophy },
-  { label: "Alliance Rankings", href: "/alliance-rankings", icon: Landmark },
-  // Offshore
-  { label: "Offshore Config", href: "/offshore-config", icon: Landmark },
+const hiddenNavSections = [
+  {
+    title: "Overview",
+    items: [
+      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Charts", href: "/charts", icon: BarChart2 },
+    ],
+  },
+  {
+    title: "Members",
+    items: [
+      { label: "Members", href: "/members", icon: Users },
+      { label: "Applicants", href: "/applicants", icon: UserPlus },
+      { label: "Relink", href: "/relink", icon: Link2 },
+      { label: "Inactive", href: "/inactive", icon: Clock },
+      { label: "Explore", href: "/explore", icon: Search },
+      { label: "Stagnant Cities", href: "/stagnant-cities", icon: Clock },
+    ],
+  },
+  {
+    title: "Military & War",
+    items: [
+      { label: "Military", href: "/military", icon: Shield },
+      { label: "MMR Checker", href: "/mmr", icon: Target },
+      { label: "Wars", href: "/wars", icon: Swords },
+      { label: "Need to Declare", href: "/slots", icon: Swords },
+      { label: "Command Center", href: "/command-center", icon: Radio },
+      { label: "Beige Watch", href: "/beige-watch", icon: ShieldOff },
+      { label: "Raid Finder", href: "/raid-finder", icon: Crosshair },
+      { label: "Tiering", href: "/tiering", icon: Layers },
+    ],
+  },
+  {
+    title: "Economy",
+    items: [
+      { label: "Stockpile", href: "/cashholders", icon: DollarSign },
+      { label: "Credits", href: "/credits", icon: Coins },
+      { label: "Revenue", href: "/revenue", icon: Wallet },
+      { label: "Trade Prices", href: "/trade-prices", icon: TrendingUp },
+    ],
+  },
+  {
+    title: "Intel",
+    items: [
+      { label: "Recruitment", href: "/recruitment", icon: Trophy },
+      { label: "Alliance Rankings", href: "/alliance-rankings", icon: Landmark },
+      { label: "Alliance Spheres", href: "/alliance-spheres", icon: Network },
+    ],
+  },
+  {
+    title: "Offshore",
+    items: [
+      { label: "Offshore Config", href: "/offshore-config", icon: Landmark },
+    ],
+  },
 ];
+
+const adminNav = [
+  { label: "Role Config", href: "/role-config", icon: Settings },
+  { label: "War Config", href: "/war-config", icon: Swords },
+  { label: "Raid Config", href: "/raid-config", icon: Crosshair },
+  { label: "Stagnant Cities Config", href: "/stagnant-cities-config", icon: Layers },
+  { label: "Spheres Config", href: "/alliance-spheres-config", icon: Network },
+  { label: "Stockpile Alerts", href: "/stockpile-alert-config", icon: BellRing },
+  { label: "Tax Config", href: "/tax-config", icon: Receipt },
+];
+
+const COLLAPSED_KEY = "sidebar-collapsed-sections";
+
 
 interface Me {
   discordId: string;
@@ -77,6 +116,58 @@ export function Sidebar({
   });
 
   const isLoggedIn = !!me;
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(COLLAPSED_KEY);
+      if (saved) setCollapsed(new Set(JSON.parse(saved) as string[]));
+    } catch {}
+  }, []);
+
+  function toggleSection(title: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  function renderLink({ label, href, icon: Icon }: { label: string; href: string; icon: typeof Shield }) {
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+          pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
+        }`}
+      >
+        <Icon size={16} />
+        {label}
+      </Link>
+    );
+  }
+
+  function renderSection(title: string, items: { label: string; href: string; icon: typeof Shield }[]) {
+    if (items.length === 0) return null;
+    // Never hide the page the user is currently on.
+    const isOpen = !collapsed.has(title) || items.some(({ href }) => href === pathname);
+    return (
+      <div key={title} className="pt-2">
+        <button
+          onClick={() => toggleSection(title)}
+          aria-expanded={isOpen}
+          className="flex items-center justify-between w-full px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          {title}
+          <ChevronDown size={14} className={`transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+        </button>
+        {isOpen && <div className="mt-1 space-y-1">{items.map(renderLink)}</div>}
+      </div>
+    );
+  }
 
   useEffect(() => {
     onClose?.();
@@ -117,96 +208,13 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
-        {nav.map(({ label, href, icon: Icon }) => {
-          const active = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                active ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Icon size={16} />
-              {label}
-            </Link>
-          );
-        })}
+        {nav.map(renderLink)}
 
-        {isLoggedIn && hiddenNav.filter(({ href }) => me?.accessiblePages.includes(href)).map(({ label, href, icon: Icon }) => {
-          const active = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                active ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Icon size={16} />
-              {label}
-            </Link>
-          );
-        })}
-
-        {me?.canManageRoles && (
-          <>
-            <Link
-              href="/role-config"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname === "/role-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Settings size={16} />
-              Role Config
-            </Link>
-            <Link
-              href="/war-config"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname === "/war-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Swords size={16} />
-              War Config
-            </Link>
-            <Link
-              href="/raid-config"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname === "/raid-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Crosshair size={16} />
-              Raid Config
-            </Link>
-            <Link
-              href="/stagnant-cities-config"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname === "/stagnant-cities-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Layers size={16} />
-              Stagnant Cities Config
-            </Link>
-            <Link
-              href="/stockpile-alert-config"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname === "/stockpile-alert-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <BellRing size={16} />
-              Stockpile Alerts
-            </Link>
-            <Link
-              href="/tax-config"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname === "/tax-config" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-[#1e2540] hover:text-white"
-              }`}
-            >
-              <Receipt size={16} />
-              Tax Config
-            </Link>
-          </>
+        {isLoggedIn && hiddenNavSections.map(({ title, items }) =>
+          renderSection(title, items.filter(({ href }) => me?.accessiblePages.includes(href))),
         )}
+
+        {me?.canManageRoles && renderSection("Admin", adminNav)}
       </nav>
 
       {!isLoggedIn && (

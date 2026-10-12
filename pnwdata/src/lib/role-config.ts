@@ -24,13 +24,16 @@ export const ADMIN_PAGE_PATHS = [
   "/credits",
   "/recruitment",
   "/alliance-rankings",
+  "/alliance-spheres",
   "/role-config",
   "/war-config",
   "/raid-config",
   "/stagnant-cities-config",
+  "/alliance-spheres-config",
   "/stockpile-alert-config",
   "/offshore-config",
   "/revenue",
+  "/trade-prices",
   "/tax-config",
 ] as const;
 

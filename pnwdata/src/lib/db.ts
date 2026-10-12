@@ -91,6 +91,12 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS trade_price_history (
+    price_id INTEGER PRIMARY KEY,
+    recorded_at INTEGER NOT NULL,
+    data TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS applicants (
     id INTEGER PRIMARY KEY,
     data TEXT NOT NULL,
@@ -276,6 +282,8 @@ if (storedRoleConfig) {
     pages["/raid-finder"] ??= pages["/ai-targets"] ?? pages["/beige-watch"] ?? [];
     pages["/raid-config"] ??= pages["/role-config"] ?? [];
     pages["/stagnant-cities-config"] ??= pages["/role-config"] ?? [];
+    pages["/alliance-spheres"] ??= pages["/alliance-rankings"] ?? [];
+    pages["/alliance-spheres-config"] ??= pages["/role-config"] ?? [];
     for (const retiredPath of ["/ai-targets", "/optimizer", "/infra", "/bank"]) {
       delete pages[retiredPath];
     }

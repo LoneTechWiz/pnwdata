@@ -215,6 +215,7 @@ export const fetchBankrecs = (): Promise<BankRec[]> => apiFetch("bankrecs");
 export const fetchAlliance = (): Promise<Alliance | null> => apiFetch("alliance");
 export const fetchSyncStatus = (): Promise<SyncStatus> => apiFetch("status");
 export const fetchTradePrices = (): Promise<TradePrice | null> => apiFetch("trade_prices");
+export const fetchTradePriceHistory = (): Promise<TradePrice[]> => apiFetch("trade_price_history");
 export const fetchGameInfo = (): Promise<GameInfo | null> => apiFetch("game_info");
 export const fetchDiscordLinks = (): Promise<Record<string, DiscordNationLink>> => apiFetch("discord_links");
 
@@ -234,4 +235,17 @@ export async function fetchStagnantCitiesConfig(): Promise<import("./stagnant-co
   const res = await fetch("/api/stagnant-cities-config");
   if (!res.ok) throw new Error(`Failed to load Stagnant Cities defaults (${res.status})`);
   return res.json();
+}
+
+export interface AllianceSpheresData {
+  fetchedAt: number;
+  worldScore: number;
+  spheres: import("./alliance-spheres").SphereStats[];
+}
+
+export async function fetchAllianceSpheres(): Promise<AllianceSpheresData> {
+  const res = await fetch("/api/alliance-spheres");
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+  return json;
 }
