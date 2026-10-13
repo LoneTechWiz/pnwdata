@@ -25,6 +25,7 @@ export const ADMIN_PAGE_PATHS = [
   "/recruitment",
   "/alliance-rankings",
   "/alliance-spheres",
+  "/sphere-tiering",
   "/role-config",
   "/war-config",
   "/raid-config",

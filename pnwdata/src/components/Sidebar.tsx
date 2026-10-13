@@ -60,6 +60,7 @@ const hiddenNavSections = [
       { label: "Recruitment", href: "/recruitment", icon: Trophy },
       { label: "Alliance Rankings", href: "/alliance-rankings", icon: Landmark },
       { label: "Alliance Spheres", href: "/alliance-spheres", icon: Network },
+      { label: "Sphere Tiering", href: "/sphere-tiering", icon: Layers },
     ],
   },
   {
@@ -80,7 +81,7 @@ const adminNav = [
   { label: "Tax Config", href: "/tax-config", icon: Receipt },
 ];
 
-const COLLAPSED_KEY = "sidebar-collapsed-sections";
+const EXPANDED_KEY = "sidebar-expanded-sections";
 
 
 interface Me {
@@ -117,20 +118,20 @@ export function Sidebar({
 
   const isLoggedIn = !!me;
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(COLLAPSED_KEY);
-      if (saved) setCollapsed(new Set(JSON.parse(saved) as string[]));
+      const saved = localStorage.getItem(EXPANDED_KEY);
+      if (saved) setExpanded(new Set(JSON.parse(saved) as string[]));
     } catch {}
   }, []);
 
   function toggleSection(title: string) {
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(title)) next.delete(title);
       else next.add(title);
-      try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next])); } catch {}
+      try { localStorage.setItem(EXPANDED_KEY, JSON.stringify([...next])); } catch {}
       return next;
     });
   }
@@ -153,7 +154,7 @@ export function Sidebar({
   function renderSection(title: string, items: { label: string; href: string; icon: typeof Shield }[]) {
     if (items.length === 0) return null;
     // Never hide the page the user is currently on.
-    const isOpen = !collapsed.has(title) || items.some(({ href }) => href === pathname);
+    const isOpen = expanded.has(title) || items.some(({ href }) => href === pathname);
     return (
       <div key={title} className="pt-2">
         <button
