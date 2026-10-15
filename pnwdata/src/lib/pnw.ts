@@ -236,16 +236,3 @@ export async function fetchStagnantCitiesConfig(): Promise<import("./stagnant-co
   if (!res.ok) throw new Error(`Failed to load Stagnant Cities defaults (${res.status})`);
   return res.json();
 }
-
-export interface AllianceSpheresData {
-  fetchedAt: number;
-  worldScore: number;
-  spheres: import("./alliance-spheres").SphereStats[];
-}
-
-export async function fetchAllianceSpheres(): Promise<AllianceSpheresData> {
-  const res = await fetch("/api/alliance-spheres");
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
-  return json;
-}

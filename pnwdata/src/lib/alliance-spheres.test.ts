@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSphereStats,
+  expandSpheres,
   DEFAULT_SPHERES_CONFIG,
   MAX_SPHERES,
   validateSpheresConfig,
@@ -69,5 +70,30 @@ describe("buildSphereStats", () => {
   it("handles an empty sphere", () => {
     const [sphere] = buildSphereStats({ spheres: [{ name: "Empty", alliance_ids: [] }] }, source);
     expect(sphere).toMatchObject({ totalScore: 0, totalNations: 0, shareOfWorld: 0, avgScorePerNation: 0 });
+  });
+});
+
+describe("expandSpheres", () => {
+  const treaty = (a: number, b: number, type = "Offshore") => ({ treaty_type: type, approved: true, alliance1_id: a, alliance2_id: b });
+  const raw = (id: number, score: number, treaties: ReturnType<typeof treaty>[] = []) => ({
+    id, name: `A${id}`, acronym: null, score, rank: id, nation_count: 10, treaties,
+  });
+
+  it("adds extensions and offshores, including offshores of offshores", () => {
+    const alliances = [raw(1, 100, [treaty(1, 2)]), raw(2, 50, [treaty(2, 3, "Extension")]), raw(3, 20), raw(4, 10)];
+    const { config, linkTypes } = expandSpheres({ spheres: [{ name: "Blue", alliance_ids: [1] }] }, alliances);
+    expect(config.spheres[0].alliance_ids).toEqual([1, 2, 3]);
+    expect(linkTypes.get(2)).toBe("Offshore");
+    expect(linkTypes.get(3)).toBe("Extension");
+    expect(linkTypes.has(1)).toBe(false);
+  });
+
+  it("keeps an alliance in the sphere of its nearest configured ancestor", () => {
+    const alliances = [raw(1, 100, [treaty(1, 2)]), raw(2, 50, [treaty(2, 3)]), raw(3, 20)];
+    const { config } = expandSpheres(
+      { spheres: [{ name: "Blue", alliance_ids: [1] }, { name: "Red", alliance_ids: [2] }] },
+      alliances,
+    );
+    expect(config.spheres.map((s) => s.alliance_ids)).toEqual([[1], [2, 3]]);
   });
 });

@@ -56,7 +56,7 @@ export default function AllianceSpheresConfigPage() {
     },
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ["allianceSpheresConfig"] });
-      queryClient.invalidateQueries({ queryKey: ["allianceSpheres"] });
+      queryClient.invalidateQueries({ queryKey: ["sphereTiering"] });
       queryClient.setQueryData<ConfigResponse>(["allianceSpheresConfig"], prev => prev && { ...prev, config: saved });
       setDraft(null);
     },

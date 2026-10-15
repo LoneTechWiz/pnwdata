@@ -59,7 +59,6 @@ const hiddenNavSections = [
     items: [
       { label: "Recruitment", href: "/recruitment", icon: Trophy },
       { label: "Alliance Rankings", href: "/alliance-rankings", icon: Landmark },
-      { label: "Alliance Spheres", href: "/alliance-spheres", icon: Network },
       { label: "Sphere Tiering", href: "/sphere-tiering", icon: Layers },
     ],
   },

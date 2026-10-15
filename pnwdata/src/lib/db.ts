@@ -282,9 +282,9 @@ if (storedRoleConfig) {
     pages["/raid-finder"] ??= pages["/ai-targets"] ?? pages["/beige-watch"] ?? [];
     pages["/raid-config"] ??= pages["/role-config"] ?? [];
     pages["/stagnant-cities-config"] ??= pages["/role-config"] ?? [];
-    pages["/alliance-spheres"] ??= pages["/alliance-rankings"] ?? [];
+    pages["/sphere-tiering"] ??= pages["/alliance-spheres"] ?? pages["/alliance-rankings"] ?? [];
     pages["/alliance-spheres-config"] ??= pages["/role-config"] ?? [];
-    for (const retiredPath of ["/ai-targets", "/optimizer", "/infra", "/bank"]) {
+    for (const retiredPath of ["/ai-targets", "/optimizer", "/infra", "/bank", "/alliance-spheres"]) {
       delete pages[retiredPath];
     }
     db.prepare("UPDATE app_config SET value = ?, updated_at = ? WHERE key = 'role-config'")

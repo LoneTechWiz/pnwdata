@@ -130,8 +130,7 @@ The sidebar has three tiers:
 | `/explore` | Explore nations |
 | `/stagnant-cities` | Nations with more than N (default 120) turns since their newest city (from per-city `date`), sorted by city count, with CSV/Excel export |
 | `/alliance-rankings` | Top 20 alliances by combined score, grouping alliances linked by approved Extension/Offshore treaties under the largest alliance they're linked to; live from the PnW API (10-min server cache), with Excel export |
-| `/alliance-spheres` | Compares user-defined spheres of alliances: combined score, share of all alliance score, nations, and each sphere's alliances; live from the PnW API (shared 10-min cache), with Excel export |
-| `/sphere-tiering` | City-count tier breakdown (1/5/10-city buckets) of each configured sphere's members, from live P&W data (10-min cache); reuses the `/alliance-spheres-config` spheres, with Excel export |
+| `/sphere-tiering` | Per-sphere summary (combined score, share of all alliance score, nations, alliances) plus a city-count tier breakdown (1/5/10-city buckets) of each configured sphere's members. Each sphere also includes the Extension/Offshore alliances of its configured alliances (same treaty grouping as `/alliance-rankings`); live from the PnW API (10-min cache), with Excel export |
 | `/command-center` | Per-nation war viewer — select a member to see their active wars with resistance/points/unit counts |
 | `/beige-watch` | Enemy nations currently on beige — sortable by turns remaining, optional score-range filter |
 | `/raid-finder` | Local raid target ranking using inactivity, beige loot, GNI snapshots, and visible bank records |

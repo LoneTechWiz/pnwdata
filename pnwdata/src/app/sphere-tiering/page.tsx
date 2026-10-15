@@ -8,13 +8,19 @@ import { AppShell } from "@/components/AppShell";
 import { ExportButton } from "@/components/ExportButton";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
 import type { SphereTieringRow } from "@/lib/sphere-tiering";
+import type { SphereStats } from "@/lib/alliance-spheres";
 
 interface SphereTieringResponse {
   spheres: string[];
   rows: SphereTieringRow[];
   totals: number[];
   hasAlliances: boolean;
+  fetchedAt: number;
+  stats: SphereStats[];
 }
+
+const fmt = (n: number) => Math.round(n).toLocaleString();
+const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 const BUCKET_SIZES = [1, 5, 10] as const;
 const COLORS = ["#60a5fa", "#f87171", "#4ade80", "#fbbf24", "#a78bfa", "#2dd4bf", "#fb923c", "#f472b6", "#a3e635", "#38bdf8", "#e879f9", "#94a3b8"];
@@ -55,7 +61,7 @@ export default function SphereTieringPage() {
               Sphere Tiering
             </h2>
             <p className="text-slate-400 text-sm mt-1">
-              City-count tiers of each sphere&apos;s members. Spheres and their alliances are set on the{" "}
+              City-count tiers of each sphere&apos;s members, including the extensions and offshores of its alliances. Spheres and their alliances are set on the{" "}
               <Link href="/alliance-spheres-config" className="text-blue-400 hover:underline inline-flex items-center gap-1">
                 <Settings size={12} />Spheres Config
               </Link>{" "}
@@ -104,6 +110,67 @@ export default function SphereTieringPage() {
 
         {data && chartData && data.rows.length > 0 && (
           <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {data.stats
+                .map((sphere, i) => ({ sphere, color: COLORS[i % COLORS.length] }))
+                .sort((a, b) => b.sphere.totalScore - a.sphere.totalScore)
+                .map(({ sphere, color }) => (
+                  <div key={sphere.name} className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-lg font-semibold" style={{ color }}>{sphere.name}</h3>
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-amber-400">{fmt(sphere.totalScore)}</div>
+                        <div className="text-xs text-slate-500">combined score · {pct(sphere.shareOfWorld)} of all alliance score</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-lg bg-[#0f1117] py-2">
+                        <div className="text-sm font-semibold text-white">{sphere.totalNations.toLocaleString()}</div>
+                        <div className="text-xs text-slate-500">nations</div>
+                      </div>
+                      <div className="rounded-lg bg-[#0f1117] py-2">
+                        <div className="text-sm font-semibold text-white">{sphere.alliances.length}</div>
+                        <div className="text-xs text-slate-500">alliances</div>
+                      </div>
+                      <div className="rounded-lg bg-[#0f1117] py-2">
+                        <div className="text-sm font-semibold text-white">{fmt(sphere.avgScorePerNation)}</div>
+                        <div className="text-xs text-slate-500">avg score / nation</div>
+                      </div>
+                    </div>
+                    {sphere.alliances.length > 0 ? (
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {sphere.alliances.map((a) => (
+                            <tr key={a.id} className="border-b border-[#1e2540] last:border-0">
+                              <td className="py-1.5">
+                                <a
+                                  href={`https://politicsandwar.com/alliance/id=${a.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-slate-200 hover:text-blue-400 transition-colors"
+                                >
+                                  {a.name}
+                                </a>
+                                {a.linkType && <span className="ml-2 text-xs text-slate-500">{a.linkType}</span>}
+                              </td>
+                              <td className="py-1.5 text-right text-slate-300">{fmt(a.score)}</td>
+                              <td className="py-1.5 text-right text-slate-300">{a.nations.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-sm text-slate-500">No alliances in this sphere.</p>
+                    )}
+                    {sphere.missingIds.length > 0 && (
+                      <p className="text-xs text-amber-400">
+                        {sphere.missingIds.length} configured alliance{sphere.missingIds.length === 1 ? "" : "s"} no longer exist ({sphere.missingIds.join(", ")}).
+                      </p>
+                    )}
+                  </div>
+                ))}
+            </div>
+
             <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={chartData} margin={{ top: 20 }}>

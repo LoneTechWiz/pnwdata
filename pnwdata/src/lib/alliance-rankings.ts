@@ -45,13 +45,15 @@ export interface AllianceGroup {
 }
 
 /**
- * Groups alliances joined by approved Extension/Offshore treaties and ranks the groups by combined score.
+ * Links each alliance to its single largest Extension/Offshore partner that outscores it.
  *
- * Treaty direction is not reliable, so each alliance attaches only to its single largest linked
- * partner by score (never to a smaller one). The largest alliance in a chain becomes the group's
- * main alliance. Attaching to one partner keeps a shared offshore from merging two big alliances.
+ * Treaty direction is not reliable, so an alliance only ever attaches to a larger partner, never a
+ * smaller one. Attaching to one partner keeps a shared offshore from merging two big alliances.
  */
-export function buildAllianceGroups(input: RawAlliance[], limit = 20): AllianceGroup[] {
+export function buildLinkParents(input: RawAlliance[]): {
+  byId: Map<number, RawAlliance>;
+  parentOf: Map<number, { id: number; type: string }>;
+} {
   // Paged API results can repeat an alliance, so keep one entry per id.
   const byId = new Map(input.map((a) => [Number(a.id), a]));
   const alliances = [...byId.values()];
@@ -88,6 +90,17 @@ export function buildAllianceGroups(input: RawAlliance[], limit = 20): AllianceG
     }
     if (best) parentOf.set(id, best);
   }
+
+  return { byId, parentOf };
+}
+
+/**
+ * Groups alliances joined by approved Extension/Offshore treaties and ranks the groups by combined score.
+ * The largest alliance in a chain becomes the group's main alliance (see `buildLinkParents`).
+ */
+export function buildAllianceGroups(input: RawAlliance[], limit = 20): AllianceGroup[] {
+  const { byId, parentOf } = buildLinkParents(input);
+  const alliances = [...byId.values()];
 
   // Parents are always strictly larger, so following them cannot loop.
   const rootOf = (id: number): number => {

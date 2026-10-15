@@ -1,3 +1,5 @@
+import { buildLinkParents, type RawAlliance } from "./alliance-rankings";
+
 /** Alliance spheres: named groups of alliances compared side by side. Safe to import from client code. */
 export interface SphereConfig {
   name: string;
@@ -62,6 +64,8 @@ export interface SphereAlliance {
   score: number;
   nations: number;
   rank: number;
+  /** Treaty type when the alliance is in the sphere as an extension/offshore of a configured alliance. */
+  linkType: string | null;
 }
 
 export interface SphereStats {
@@ -86,7 +90,11 @@ export interface SourceAlliance {
 }
 
 /** Combines each sphere's alliances into totals, in the order the spheres are configured. */
-export function buildSphereStats(config: AllianceSpheresConfig, source: SourceAlliance[]): SphereStats[] {
+export function buildSphereStats(
+  config: AllianceSpheresConfig,
+  source: SourceAlliance[],
+  linkTypes: Map<number, string> = new Map(),
+): SphereStats[] {
   const byId = new Map(source.map((a) => [Number(a.id), a]));
   const worldScore = source.reduce((sum, a) => sum + a.score, 0);
 
@@ -96,7 +104,7 @@ export function buildSphereStats(config: AllianceSpheresConfig, source: SourceAl
     for (const id of sphere.alliance_ids) {
       const a = byId.get(id);
       if (!a) { missingIds.push(id); continue; }
-      alliances.push({ id, name: a.name, acronym: a.acronym, score: a.score, nations: a.nation_count, rank: a.rank });
+      alliances.push({ id, name: a.name, acronym: a.acronym, score: a.score, nations: a.nation_count, rank: a.rank, linkType: linkTypes.get(id) ?? null });
     }
     alliances.sort((x, y) => y.score - x.score || x.id - y.id);
 
@@ -112,4 +120,42 @@ export function buildSphereStats(config: AllianceSpheresConfig, source: SourceAl
       missingIds,
     };
   });
+}
+
+/**
+ * Adds each configured alliance's extensions and offshores to its sphere, using the same
+ * treaty links as Alliance Rankings. An alliance joins the sphere of its nearest configured
+ * ancestor, so offshores of an offshore are included and nothing lands in two spheres.
+ */
+export function expandSpheres(
+  config: AllianceSpheresConfig,
+  alliances: RawAlliance[],
+): { config: AllianceSpheresConfig; linkTypes: Map<number, string> } {
+  const sphereOf = new Map<number, number>();
+  config.spheres.forEach((sphere, index) => sphere.alliance_ids.forEach((id) => sphereOf.set(id, index)));
+
+  const { byId, parentOf } = buildLinkParents(alliances);
+  const added = config.spheres.map(() => [] as number[]);
+  const linkTypes = new Map<number, string>();
+
+  for (const id of byId.keys()) {
+    if (sphereOf.has(id)) continue;
+    // Parents are always strictly larger, so this walk cannot loop.
+    let current = id;
+    while (parentOf.has(current) && !sphereOf.has(current)) current = parentOf.get(current)!.id;
+    const sphere = sphereOf.get(current);
+    if (sphere === undefined) continue;
+    added[sphere].push(id);
+    linkTypes.set(id, parentOf.get(id)!.type);
+  }
+
+  return {
+    config: {
+      spheres: config.spheres.map((sphere, i) => ({
+        ...sphere,
+        alliance_ids: [...sphere.alliance_ids, ...added[i].sort((a, b) => a - b)],
+      })),
+    },
+    linkTypes,
+  };
 }
