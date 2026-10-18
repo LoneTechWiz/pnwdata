@@ -5,10 +5,10 @@ import { Calculator } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ExportButton } from "@/components/ExportButton";
 import { LoadingSpinner, ErrorMessage } from "@/components/LoadingSpinner";
-import { MAX_TARGET_CITIES, costToReach, flatDiscount, parseNationIds, policyDiscount } from "@/lib/city-cost";
+import { MAX_TARGET_CITIES, costToReach, parseNationIds, policyDiscount } from "@/lib/city-cost";
 import type { CityCostResponse } from "@/app/api/city-cost/route";
 
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
+const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (n: number) => `${+(n * 100).toFixed(1)}%`;
 
 async function fetchCityCost(ids: string, target: number): Promise<CityCostResponse> {
@@ -38,7 +38,7 @@ export default function CityCostPage() {
     if (!data || !submitted) return [];
     return data.nations.map((nation) => ({
       nation,
-      ...costToReach(nation.cities, submitted.target, nation.mods),
+      ...costToReach(nation.cities, submitted.target, data.cityAverage, nation.mods),
     }));
   }, [data, submitted]);
 
@@ -60,7 +60,7 @@ export default function CityCostPage() {
             City Cost Calculator
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Total cost to grow nations to a target city count, using each nation&apos;s Urban Planning projects and Manifest Destiny policy.
+            Total cost to grow nations to a target city count, using the game&apos;s current city cost formula and each nation&apos;s Manifest Destiny policy and refund discount.
           </p>
         </div>
 
@@ -136,6 +136,10 @@ export default function CityCostPage() {
               <span className="text-2xl font-bold text-amber-400">{money(grandTotal)}</span>
             </div>
 
+            <p className="text-xs text-slate-500">
+              Game city average used in the formula: {data?.cityAverage}
+            </p>
+
             <div className="overflow-x-auto rounded-xl border border-[#2a3150]">
               <table className="w-full text-sm whitespace-nowrap">
                 <thead className="bg-[#161b2e] border-b border-[#2a3150] text-xs text-slate-400 uppercase tracking-wide">
@@ -149,7 +153,7 @@ export default function CityCostPage() {
                 </thead>
                 <tbody className="divide-y divide-[#2a3150]">
                   {results.map(({ nation, rows, total }) => {
-                    const flat = flatDiscount(nation.mods);
+                    const refund = nation.mods.citiesDiscount;
                     const policy = policyDiscount(nation.mods);
                     return (
                       <tr key={nation.id} className="bg-[#161b2e] hover:bg-[#1e2540] transition-colors">
@@ -166,13 +170,13 @@ export default function CityCostPage() {
                         </td>
                         <td className="px-3 py-2.5 text-right text-slate-300">{nation.cities}</td>
                         <td className="px-3 py-2.5 text-slate-300">
-                          {flat === 0 && policy === 0 ? (
+                          {refund === 0 && policy === 0 ? (
                             <span className="text-slate-500">None</span>
                           ) : (
                             <>
-                              {flat > 0 && <span>{money(flat)} off / city (projects)</span>}
-                              {flat > 0 && policy > 0 && <span className="text-slate-500"> · </span>}
                               {policy > 0 && <span>Manifest Destiny {pct(policy)}</span>}
+                              {refund > 0 && policy > 0 && <span className="text-slate-500"> · </span>}
+                              {refund > 0 && <span>{money(refund)} refund credit</span>}
                             </>
                           )}
                         </td>

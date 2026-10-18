@@ -1,44 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { baseCityCost, cityPurchaseCost, costToReach, parseNationIds, type CityCostModifiers } from "./city-cost";
+import { baseCityCost, costToReach, parseNationIds, policyDiscount, type CityCostModifiers } from "./city-cost";
 
 const none: CityCostModifiers = {
-  urbanPlanning: false, advancedUrbanPlanning: false, metropolitanPlanning: false,
-  manifestDestiny: false, governmentSupportAgency: false,
+  manifestDestiny: false, governmentSupportAgency: false, bureauOfDomesticAffairs: false, citiesDiscount: 0,
 };
+const AVERAGE = 43.6452;
 
 describe("city cost", () => {
-  it("matches the wiki's base costs for the first new cities", () => {
-    expect(baseCityCost(1)).toBe(225_000);
-    expect(baseCityCost(2)).toBe(425_000);
+  it("matches a real in-game price: city 47 with Manifest Destiny, GSA and the Bureau", () => {
+    const mods = { ...none, manifestDestiny: true, governmentSupportAgency: true, bureauOfDomesticAffairs: true };
+    expect(policyDiscount(mods)).toBeCloseTo(0.0875, 10);
+    expect(costToReach(46, 47, AVERAGE, mods).total).toBe(4_293_914_664.08);
   });
 
-  it("applies Manifest Destiny as 5%, or 7.5% with the Government Support Agency", () => {
-    expect(cityPurchaseCost(1, { ...none, manifestDestiny: true })).toBe(213_750);
-    expect(cityPurchaseCost(2, { ...none, manifestDestiny: true })).toBe(403_750);
-    expect(cityPurchaseCost(2, { ...none, manifestDestiny: true, governmentSupportAgency: true })).toBe(393_125);
+  it("scales Manifest Destiny with the projects that boost it, and only when the policy is active", () => {
+    expect(policyDiscount({ ...none, manifestDestiny: true })).toBeCloseTo(0.05, 10);
+    expect(policyDiscount({ ...none, manifestDestiny: true, governmentSupportAgency: true })).toBeCloseTo(0.075, 10);
+    expect(policyDiscount({ ...none, governmentSupportAgency: true, bureauOfDomesticAffairs: true })).toBe(0);
   });
 
-  it("ignores the Government Support Agency without Manifest Destiny", () => {
-    expect(cityPurchaseCost(2, { ...none, governmentSupportAgency: true })).toBe(425_000);
+  it("falls back to the city-squared floor for far-below-average costs", () => {
+    expect(baseCityCost(10, 100)).toBe(10 ** 2 * 100_000);
   });
 
-  it("stacks the project discounts and applies Manifest Destiny after them", () => {
-    const all = { ...none, urbanPlanning: true, advancedUrbanPlanning: true, metropolitanPlanning: true };
-    const base = baseCityCost(30); // 1,215,075,000 + ... well above the $300M total discount
-    expect(cityPurchaseCost(30, all)).toBe(base - 300_000_000);
-    expect(cityPurchaseCost(30, { ...all, manifestDestiny: true })).toBe(Math.round((base - 300_000_000) * 0.95));
+  it("spends a leftover refund discount across cities and never goes below $1", () => {
+    const first = costToReach(46, 47, AVERAGE, none).total;
+    const result = costToReach(46, 48, AVERAGE, { ...none, citiesDiscount: first + 1000 });
+    expect(result.rows[0].cost).toBe(1);
+    expect(result.rows[1].cost).toBeCloseTo(baseCityCost(48, AVERAGE) - 1001, 1);
   });
 
-  it("never goes below $1", () => {
-    expect(cityPurchaseCost(2, { ...none, urbanPlanning: true })).toBe(1);
-  });
-
-  it("sums every city up to the target and is empty when already there", () => {
-    const result = costToReach(1, 3, none);
-    expect(result.rows).toEqual([{ city: 2, cost: 225_000 }, { city: 3, cost: 425_000 }]);
-    expect(result.total).toBe(650_000);
-    expect(costToReach(5, 5, none)).toEqual({ rows: [], total: 0 });
-    expect(costToReach(8, 5, none)).toEqual({ rows: [], total: 0 });
+  it("lists every city up to the target and is empty when already there", () => {
+    expect(costToReach(44, 47, AVERAGE, none).rows.map((r) => r.city)).toEqual([45, 46, 47]);
+    expect(costToReach(5, 5, AVERAGE, none)).toEqual({ rows: [], total: 0 });
+    expect(costToReach(8, 5, AVERAGE, none)).toEqual({ rows: [], total: 0 });
   });
 });
 

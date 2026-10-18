@@ -7,10 +7,13 @@ export const dynamic = "force-dynamic";
 const MAX_NATIONS = 50;
 
 const NATIONS_QUERY = `
-  query($id:[Int]) { nations(id:$id, first:${MAX_NATIONS}) { data {
-    id nation_name leader_name num_cities domestic_policy
-    urban_planning advanced_urban_planning metropolitan_planning government_support_agency
-  } } }
+  query($id:[Int]) {
+    game_info { city_average }
+    nations(id:$id, first:${MAX_NATIONS}) { data {
+      id nation_name leader_name num_cities domestic_policy
+      government_support_agency bureau_of_domestic_affairs cities_discount
+    } }
+  }
 `;
 
 interface RawNation {
@@ -19,10 +22,9 @@ interface RawNation {
   leader_name: string;
   num_cities: number;
   domestic_policy: string;
-  urban_planning: boolean;
-  advanced_urban_planning: boolean;
-  metropolitan_planning: boolean;
   government_support_agency: boolean;
+  bureau_of_domestic_affairs: boolean;
+  cities_discount: number | null;
 }
 
 export interface CityCostNation {
@@ -35,6 +37,8 @@ export interface CityCostNation {
 }
 
 export interface CityCostResponse {
+  /** The game's average city count, an input to the city cost formula. */
+  cityAverage: number;
   nations: CityCostNation[];
   /** Requested IDs that P&W has no nation for. */
   notFound: number[];
@@ -52,7 +56,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const data = await gql<{ nations: { data: RawNation[] } }>(NATIONS_QUERY, { id: ids });
+    const data = await gql<{ game_info: { city_average: number }; nations: { data: RawNation[] } }>(NATIONS_QUERY, { id: ids });
     const byId = new Map(data.nations.data.map((n) => [Number(n.id), n]));
     // Keep the order the IDs were entered in.
     const nations: CityCostNation[] = ids.flatMap((id) => {
@@ -65,15 +69,14 @@ export async function GET(request: NextRequest) {
         cities: n.num_cities,
         domesticPolicy: n.domestic_policy,
         mods: {
-          urbanPlanning: !!n.urban_planning,
-          advancedUrbanPlanning: !!n.advanced_urban_planning,
-          metropolitanPlanning: !!n.metropolitan_planning,
           manifestDestiny: n.domestic_policy === "MANIFEST_DESTINY",
           governmentSupportAgency: !!n.government_support_agency,
+          bureauOfDomesticAffairs: !!n.bureau_of_domestic_affairs,
+          citiesDiscount: n.cities_discount ?? 0,
         },
       }];
     });
-    const response: CityCostResponse = { nations, notFound: ids.filter((id) => !byId.has(id)) };
+    const response: CityCostResponse = { cityAverage: data.game_info.city_average, nations, notFound: ids.filter((id) => !byId.has(id)) };
     return NextResponse.json(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load nations";

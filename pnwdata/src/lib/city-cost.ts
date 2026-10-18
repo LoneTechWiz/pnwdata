@@ -1,53 +1,42 @@
-/** City purchase cost maths. Pure, so it is safe to import from client code. */
+/**
+ * City purchase cost maths (formula in effect since the March 2025 city cost change).
+ * Pure, so it is safe to import from client code.
+ */
 
-/** Flat per-city discounts from the city cost projects; they stack with each other. */
-export const URBAN_PLANNING_DISCOUNT = 50_000_000;
-export const ADVANCED_URBAN_PLANNING_DISCOUNT = 100_000_000;
-export const METROPOLITAN_PLANNING_DISCOUNT = 150_000_000;
-
-/** Manifest Destiny's percentage discount, and its larger value with the Government Support Agency. */
+/** Manifest Destiny's base discount; Government Support Agency (+50%) and Bureau of Domestic Affairs (+25%) boost it. */
 export const MANIFEST_DESTINY_DISCOUNT = 0.05;
-export const MANIFEST_DESTINY_GSA_DISCOUNT = 0.075;
+export const GOVERNMENT_SUPPORT_AGENCY_BOOST = 0.5;
+export const BUREAU_OF_DOMESTIC_AFFAIRS_BOOST = 0.25;
 
 export interface CityCostModifiers {
-  urbanPlanning: boolean;
-  advancedUrbanPlanning: boolean;
-  metropolitanPlanning: boolean;
   manifestDestiny: boolean;
   governmentSupportAgency: boolean;
+  bureauOfDomesticAffairs: boolean;
+  /** Cash discount left over from the refund for the retired Urban Planning projects (the API's `cities_discount`). */
+  citiesDiscount: number;
 }
 
 export const MAX_TARGET_CITIES = 500;
 
-/** Cost of the next city before any discounts, given how many cities the nation has now. */
-export function baseCityCost(currentCities: number): number {
-  return 50_000 * (currentCities - 1) ** 3 + 150_000 * currentCities + 75_000;
-}
-
-/** Total flat discount per city from the nation's projects. */
-export function flatDiscount(mods: CityCostModifiers): number {
-  return (mods.urbanPlanning ? URBAN_PLANNING_DISCOUNT : 0)
-    + (mods.advancedUrbanPlanning ? ADVANCED_URBAN_PLANNING_DISCOUNT : 0)
-    + (mods.metropolitanPlanning ? METROPOLITAN_PLANNING_DISCOUNT : 0);
+/**
+ * Cost of buying city number `cityToBuy` before discounts. `cityAverage` is the game's average city
+ * count (the API's `game_info.city_average`), which makes cities cheaper for nations below it.
+ */
+export function baseCityCost(cityToBuy: number, cityAverage: number): number {
+  const x = cityToBuy - cityAverage / 4;
+  return Math.max(100_000 * x ** 3 + 150_000 * x + 75_000, cityToBuy ** 2 * 100_000);
 }
 
 /** Percentage discount from the domestic policy (0 when it isn't Manifest Destiny). */
 export function policyDiscount(mods: CityCostModifiers): number {
   if (!mods.manifestDestiny) return 0;
-  return mods.governmentSupportAgency ? MANIFEST_DESTINY_GSA_DISCOUNT : MANIFEST_DESTINY_DISCOUNT;
-}
-
-/**
- * Cost of buying one city when the nation currently has `currentCities`.
- * Projects discount first (never below $1), then Manifest Destiny takes its percentage off the result.
- */
-export function cityPurchaseCost(currentCities: number, mods: CityCostModifiers): number {
-  const afterProjects = Math.max(1, baseCityCost(currentCities) - flatDiscount(mods));
-  return Math.max(1, Math.round(afterProjects * (1 - policyDiscount(mods))));
+  return MANIFEST_DESTINY_DISCOUNT
+    * (1 + (mods.governmentSupportAgency ? GOVERNMENT_SUPPORT_AGENCY_BOOST : 0)
+      + (mods.bureauOfDomesticAffairs ? BUREAU_OF_DOMESTIC_AFFAIRS_BOOST : 0));
 }
 
 export interface CityCostRow {
-  /** The city number being bought (current cities + 1 up to the target). */
+  /** The city number being bought. */
   city: number;
   cost: number;
 }
@@ -57,16 +46,32 @@ export interface CityCostResult {
   total: number;
 }
 
-/** Cost of buying every city from the nation's next one up to and including `targetCities`. */
-export function costToReach(currentCities: number, targetCities: number, mods: CityCostModifiers): CityCostResult {
+const toCents = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Cost of buying every city from the nation's next one up to and including `targetCities`.
+ * Manifest Destiny's percentage comes off first, then any leftover refund discount is used up
+ * city by city (a city never costs less than $1).
+ */
+export function costToReach(
+  currentCities: number,
+  targetCities: number,
+  cityAverage: number,
+  mods: CityCostModifiers,
+): CityCostResult {
   const rows: CityCostRow[] = [];
   let total = 0;
-  for (let owned = currentCities; owned < targetCities; owned++) {
-    const cost = cityPurchaseCost(owned, mods);
-    rows.push({ city: owned + 1, cost });
+  let discountLeft = Math.max(0, mods.citiesDiscount);
+  const policy = policyDiscount(mods);
+  for (let city = currentCities + 1; city <= targetCities; city++) {
+    const price = Math.max(1, baseCityCost(city, cityAverage) * (1 - policy));
+    const used = Math.min(discountLeft, price - 1);
+    discountLeft -= used;
+    const cost = toCents(price - used);
+    rows.push({ city, cost });
     total += cost;
   }
-  return { rows, total };
+  return { rows, total: toCents(total) };
 }
 
 /** Pulls nation IDs out of free text (commas, spaces, new lines or pasted `id=123` links), without repeats. */
