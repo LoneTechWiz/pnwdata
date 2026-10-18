@@ -34,6 +34,7 @@ export const ADMIN_PAGE_PATHS = [
   "/offshore-config",
   "/revenue",
   "/trade-prices",
+  "/city-cost",
   "/tax-config",
 ] as const;
 

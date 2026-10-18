@@ -142,6 +142,7 @@ The sidebar has three tiers:
 | `/offshore-config` | Lets any logged-in member submit a P&W API key for an offshore or extension alliance; the app verifies it, detects the alliance automatically, and syncs the same member/war/bank data it tracks for the main alliance. Visible to Emperors and to any role granted access via `/role-config` |
 | `/revenue` | Actual tax collected vs. real alliance revenue vs. member safekept amount, per bracket and per alliance (main + offshore) |
 | `/trade-prices` | Current 24h average price per resource with change vs 24h ago, plus a price-history line chart (24h/7d/30d) per resource and CSV export |
+| `/city-cost` | City cost calculator: enter nation IDs and a target city count to get each nation's total cost plus a per-city cost table. Costs come from `src/lib/city-cost.ts` (base `50000·(n−1)³ + 150000·n + 75000` for a nation with `n` cities, minus flat Urban Planning / Advanced / Metropolitan Planning discounts of $50M / $100M / $150M per city, then Manifest Destiny −5% or −7.5% with the Government Support Agency); nations are fetched live from the PnW API |
 | `/tax-config` | Admin UI to set the real rate per P&W tax bracket (capped at the bracket's nominal rate); e.g. a bracket nominally at 100/100 with a real rate of 20/20 means 80% of what's collected is member safekeep, not alliance revenue |
 
 ### External APIs
