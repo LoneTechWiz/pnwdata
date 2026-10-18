@@ -110,6 +110,21 @@ export default function SphereTieringPage() {
 
         {data && chartData && data.rows.length > 0 && (
           <>
+            <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={chartData} margin={{ top: 20 }}>
+                  <XAxis dataKey="tier" tick={{ fill: "#64748b", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#64748b", fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+                  {data.spheres.map((name, i) => (
+                    <Area key={name} type="step" dataKey={name} stroke={COLORS[i % COLORS.length]} strokeWidth={2}
+                      fill={COLORS[i % COLORS.length]} fillOpacity={0.12} />
+                  ))}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
             <div className="grid gap-4 lg:grid-cols-2">
               {data.stats
                 .map((sphere, i) => ({ sphere, color: COLORS[i % COLORS.length] }))
@@ -169,21 +184,6 @@ export default function SphereTieringPage() {
                     )}
                   </div>
                 ))}
-            </div>
-
-            <div className="bg-[#161b2e] border border-[#2a3150] rounded-xl p-4">
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={chartData} margin={{ top: 20 }}>
-                  <XAxis dataKey="tier" tick={{ fill: "#64748b", fontSize: 11 }} />
-                  <YAxis tick={{ fill: "#64748b", fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip {...TOOLTIP_STYLE} />
-                  <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
-                  {data.spheres.map((name, i) => (
-                    <Area key={name} type="step" dataKey={name} stroke={COLORS[i % COLORS.length]} strokeWidth={2}
-                      fill={COLORS[i % COLORS.length]} fillOpacity={0.12} />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-[#2a3150]">
