@@ -41,16 +41,16 @@ export interface InfraDiscountSource {
   advanced_engineering_corps?: boolean;
   government_support_agency?: boolean;
   bureau_of_domestic_affairs?: boolean;
-  domestic_policy?: string;
 }
 
-/** Total fraction taken off infra purchases for a nation (0.1 = 10% off). */
+/**
+ * Total fraction taken off infra purchases for a nation (0.1 = 10% off). A rebuild assumes every
+ * nation switches to Urbanization first, so the policy discount applies whatever their current policy.
+ */
 export function infraDiscount(nation: InfraDiscountSource): number {
-  const policy = nation.domestic_policy === "URBANIZATION"
-    ? URBANIZATION_DISCOUNT
-      * (1 + (nation.government_support_agency ? GOVERNMENT_SUPPORT_AGENCY_BOOST : 0)
-        + (nation.bureau_of_domestic_affairs ? BUREAU_OF_DOMESTIC_AFFAIRS_BOOST : 0))
-    : 0;
+  const policy = URBANIZATION_DISCOUNT
+    * (1 + (nation.government_support_agency ? GOVERNMENT_SUPPORT_AGENCY_BOOST : 0)
+      + (nation.bureau_of_domestic_affairs ? BUREAU_OF_DOMESTIC_AFFAIRS_BOOST : 0));
   return (nation.center_for_civil_engineering ? INFRA_PROJECT_DISCOUNT : 0)
     + (nation.advanced_engineering_corps ? INFRA_PROJECT_DISCOUNT : 0)
     + policy;

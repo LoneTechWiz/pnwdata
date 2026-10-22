@@ -47,7 +47,7 @@ export default function RebuildCostPage() {
               Rebuild Cost Estimate
             </h2>
             <p className="text-slate-400 text-sm mt-1">
-              Cost for every city of every member to go from the starting to the target infrastructure for their city tier, after their Center for Civil Engineering, Advanced Engineering Corps and Urbanization discounts.
+              Cost for every city of every member to go from the starting to the target infrastructure for their city tier, after their Center for Civil Engineering and Advanced Engineering Corps discounts, assuming everyone is on the Urbanization domestic policy.
             </p>
           </div>
           <div className="flex items-center gap-3">

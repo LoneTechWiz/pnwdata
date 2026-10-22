@@ -20,12 +20,14 @@ describe("rebuild cost", () => {
     expect(baseInfraCost(800, 500)).toBe(0);
   });
 
-  it("stacks project and policy discounts, boosting the policy only", () => {
-    expect(infraDiscount({})).toBe(0);
-    expect(infraDiscount({ center_for_civil_engineering: true, advanced_engineering_corps: true })).toBeCloseTo(0.1, 10);
-    expect(infraDiscount({ domestic_policy: "URBANIZATION", government_support_agency: true, bureau_of_domestic_affairs: true }))
-      .toBeCloseTo(0.0875, 10);
-    expect(infraDiscount({ domestic_policy: "MANIFEST_DESTINY", government_support_agency: true })).toBe(0);
+  it("assumes Urbanization for everyone, adds the project discounts, and boosts only the policy", () => {
+    expect(infraDiscount({})).toBeCloseTo(0.05, 10);
+    expect(infraDiscount({ center_for_civil_engineering: true, advanced_engineering_corps: true })).toBeCloseTo(0.15, 10);
+    expect(infraDiscount({ government_support_agency: true, bureau_of_domestic_affairs: true })).toBeCloseTo(0.0875, 10);
+    expect(infraDiscount({
+      center_for_civil_engineering: true, advanced_engineering_corps: true,
+      government_support_agency: true, bureau_of_domestic_affairs: true,
+    })).toBeCloseTo(0.1875, 10);
   });
 
   it("picks the tier by city count and multiplies per-city cost by cities", () => {
@@ -38,8 +40,8 @@ describe("rebuild cost", () => {
     });
     if (!("config" in config)) throw new Error(config.error);
     const estimate = estimateRebuild(config.config, { num_cities: 5, center_for_civil_engineering: true });
-    expect(estimate.perCity).toBeCloseTo(3002.2 * 0.95, 6);
-    expect(estimate.total).toBeCloseTo(3002.2 * 0.95 * 5, 6);
+    expect(estimate.perCity).toBeCloseTo(3002.2 * 0.90, 6);
+    expect(estimate.total).toBeCloseTo(3002.2 * 0.90 * 5, 6);
   });
 
   it("rejects bad config", () => {
