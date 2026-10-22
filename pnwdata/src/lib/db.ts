@@ -284,6 +284,7 @@ if (storedRoleConfig) {
     pages["/stagnant-cities-config"] ??= pages["/role-config"] ?? [];
     pages["/sphere-tiering"] ??= pages["/alliance-spheres"] ?? pages["/alliance-rankings"] ?? [];
     pages["/alliance-spheres-config"] ??= pages["/role-config"] ?? [];
+    pages["/rebuild-config"] ??= pages["/role-config"] ?? [];
     for (const retiredPath of ["/ai-targets", "/optimizer", "/infra", "/bank", "/alliance-spheres"]) {
       delete pages[retiredPath];
     }

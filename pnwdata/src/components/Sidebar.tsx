@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Users, Swords, BarChart2, Shield,
   Search, Clock, Target, UserPlus,
-  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt, Network, TrendingUp, Calculator, ChevronDown, X,
+  DollarSign, Crosshair, Radio, LogOut, LogIn, Settings, ShieldOff, Link2, BellRing, Coins, Trophy, Layers, Landmark, Wallet, Receipt, Network, TrendingUp, Calculator, Hammer, ChevronDown, X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -53,6 +53,7 @@ const hiddenNavSections = [
       { label: "Revenue", href: "/revenue", icon: Wallet },
       { label: "Trade Prices", href: "/trade-prices", icon: TrendingUp },
       { label: "City Cost", href: "/city-cost", icon: Calculator },
+      { label: "Rebuild Cost", href: "/rebuild-cost", icon: Hammer },
     ],
   },
   {
@@ -78,6 +79,7 @@ const adminNav = [
   { label: "Stagnant Cities Config", href: "/stagnant-cities-config", icon: Layers },
   { label: "Spheres Config", href: "/alliance-spheres-config", icon: Network },
   { label: "Stockpile Alerts", href: "/stockpile-alert-config", icon: BellRing },
+  { label: "Rebuild Config", href: "/rebuild-config", icon: Hammer },
   { label: "Tax Config", href: "/tax-config", icon: Receipt },
 ];
 

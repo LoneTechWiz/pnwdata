@@ -236,3 +236,9 @@ export async function fetchStagnantCitiesConfig(): Promise<import("./stagnant-co
   if (!res.ok) throw new Error(`Failed to load Stagnant Cities defaults (${res.status})`);
   return res.json();
 }
+
+export async function fetchRebuildConfig(): Promise<import("./rebuild-cost").RebuildConfig> {
+  const res = await fetch("/api/rebuild-config");
+  if (!res.ok) throw new Error(`Failed to load Rebuild Cost settings (${res.status})`);
+  return res.json();
+}
