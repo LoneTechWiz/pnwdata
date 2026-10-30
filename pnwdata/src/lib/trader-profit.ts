@@ -29,7 +29,8 @@ export interface TraderProfit {
 
 /**
  * Totals per nation and resource of accepted global trades since `since` (Unix ms, by acceptance time).
- * The seller is the trade's sender and the buyer its receiver. A trade whose id is the `original_trade_id`
+ * `buy_or_sell` is the sender's side: on a "sell" the sender is the seller and the receiver the buyer, on a
+ * "buy" the sender is the buyer and the receiver the seller. A trade whose id is the `original_trade_id`
  * of another accepted trade is the offer that one was made from, so only the accepted copy counts.
  */
 export function queryTraderTotals(database: Database, since: number): TraderResourceTotals[] {
@@ -38,11 +39,12 @@ export function queryTraderTotals(database: Database, since: number): TraderReso
       SELECT t.* FROM trades t
       WHERE t.accepted = 1 AND t.type = 'GLOBAL' AND t.date_accepted >= @since
         AND t.sender_id IS NOT NULL AND t.receiver_id IS NOT NULL AND t.price IS NOT NULL AND t.offer_amount IS NOT NULL
+        AND LOWER(t.buy_or_sell) IN ('buy', 'sell')
         AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.original_trade_id = t.id AND c.accepted = 1)
     ), sides AS (
-      SELECT sender_id AS nation_id, offer_resource, 0 AS bought, offer_amount AS units, offer_amount * CAST(price AS REAL) AS value FROM accepted
+      SELECT sender_id AS nation_id, offer_resource, LOWER(buy_or_sell) = 'buy' AS bought, offer_amount AS units, offer_amount * CAST(price AS REAL) AS value FROM accepted
       UNION ALL
-      SELECT receiver_id, offer_resource, 1, offer_amount, offer_amount * CAST(price AS REAL) FROM accepted
+      SELECT receiver_id, offer_resource, LOWER(buy_or_sell) = 'sell', offer_amount, offer_amount * CAST(price AS REAL) FROM accepted
     )
     SELECT nation_id AS nationId, offer_resource AS resource,
       SUM(CASE WHEN bought = 1 THEN units ELSE 0 END) AS unitsBought,

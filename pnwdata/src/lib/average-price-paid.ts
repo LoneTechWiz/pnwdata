@@ -35,7 +35,8 @@ export function averagePricePaid(database: Database, nationId: number, resource:
   const purchases = database.prepare(`
     SELECT t.offer_amount AS units, t.price AS price, t.date_accepted AS acceptedAt
     FROM trades t
-    WHERE t.receiver_id = @nationId AND t.offer_resource = @resource
+    WHERE ((LOWER(t.buy_or_sell) = 'sell' AND t.receiver_id = @nationId) OR (LOWER(t.buy_or_sell) = 'buy' AND t.sender_id = @nationId))
+      AND t.offer_resource = @resource
       AND t.accepted = 1 AND t.type = 'GLOBAL' AND t.price IS NOT NULL AND t.offer_amount > 0 AND t.date_accepted IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM trades c WHERE c.original_trade_id = t.id AND c.accepted = 1)
     ORDER BY t.date_accepted DESC, t.id DESC

@@ -15,11 +15,11 @@ beforeEach(() => {
 });
 
 let nextId = 1;
-function buy(t: { buyer?: number; resource?: string; units: number; price: number; at: number; type?: string; accepted?: boolean; id?: number; original?: number }) {
+function buy(t: { side?: "buy" | "sell"; buyer?: number; resource?: string; units: number; price: number; at: number; type?: string; accepted?: boolean; id?: number; original?: number }) {
   database.prepare(`
     INSERT INTO trades (id, type, date, sender_id, receiver_id, offer_resource, offer_amount, buy_or_sell, price, accepted, date_accepted, original_trade_id)
-    VALUES (?, ?, ?, 99, ?, ?, ?, 'sell', ?, ?, ?, ?)
-  `).run(t.id ?? nextId++, t.type ?? "GLOBAL", t.at, t.buyer ?? 1, t.resource ?? "steel", t.units, t.price,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(t.id ?? nextId++, t.type ?? "GLOBAL", t.at, ...(t.side === "buy" ? [t.buyer ?? 1, 99] : [99, t.buyer ?? 1]), t.resource ?? "steel", t.units, t.side ?? "sell", t.price,
     t.accepted === false ? 0 : 1, t.accepted === false ? null : t.at, t.original ?? null);
 }
 
@@ -44,6 +44,13 @@ describe("averagePricePaid", () => {
   it("reports an incomplete answer when the nation bought less than asked", () => {
     buy({ units: 100, price: 3000, at: 1000 });
     expect(averagePricePaid(database, 1, "steel", 500)).toMatchObject({ averagePrice: 3000, unitsCovered: 100, complete: false });
+  });
+
+  it("counts a buy offer the nation sent as its purchase, and a sell offer it sent as not one", () => {
+    buy({ side: "buy", units: 100, price: 3000, at: 1000 });
+    expect(averagePricePaid(database, 1, "steel", 100)).toMatchObject({ averagePrice: 3000, trades: 1 });
+    database.exec("UPDATE trades SET buy_or_sell = 'sell', sender_id = 1, receiver_id = 99");
+    expect(averagePricePaid(database, 1, "steel", 100).trades).toBe(0);
   });
 
   it("returns a null average when there are no purchases", () => {

@@ -18,11 +18,11 @@ beforeEach(() => {
 });
 
 let nextId = 1;
-function addTrade(t: { seller: number; buyer: number; resource?: string; amount: number; price: number; type?: string; accepted?: boolean; acceptedAt?: number; original?: number; id?: number }) {
+function addTrade(t: { side?: "buy" | "sell"; seller: number; buyer: number; resource?: string; amount: number; price: number; type?: string; accepted?: boolean; acceptedAt?: number; original?: number; id?: number }) {
   database.prepare(`
     INSERT INTO trades (id, type, date, sender_id, receiver_id, offer_resource, offer_amount, buy_or_sell, price, accepted, date_accepted, original_trade_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'sell', ?, ?, ?, ?)
-  `).run(t.id ?? nextId++, t.type ?? "GLOBAL", NOW - DAY, t.seller, t.buyer, t.resource ?? "steel", t.amount, t.price,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(t.id ?? nextId++, t.type ?? "GLOBAL", NOW - DAY, ...(t.side === "buy" ? [t.buyer, t.seller] : [t.seller, t.buyer]), t.resource ?? "steel", t.amount, t.side ?? "sell", t.price,
     t.accepted === false ? 0 : 1, t.accepted === false ? null : (t.acceptedAt ?? NOW - 1000), t.original ?? null);
 }
 
@@ -33,6 +33,13 @@ describe("queryTraderTotals", () => {
     const totals = queryTraderTotals(database, NOW - DAY);
     const nation2 = totals.find((t) => t.nationId === 2)!;
     expect(nation2).toMatchObject({ resource: "steel", unitsBought: 100, costOfBought: 300_000, unitsSold: 100, revenueOfSold: 350_000, trades: 2 });
+  });
+
+  it("takes the sides from buy_or_sell: on a buy the sender is the buyer", () => {
+    addTrade({ side: "buy", seller: 1, buyer: 2, amount: 100, price: 3000 });
+    const totals = queryTraderTotals(database, NOW - DAY);
+    expect(totals.find((t) => t.nationId === 2)).toMatchObject({ unitsBought: 100, unitsSold: 0 });
+    expect(totals.find((t) => t.nationId === 1)).toMatchObject({ unitsBought: 0, unitsSold: 100 });
   });
 
   it("ignores open offers, non-global trades, and trades accepted before the window", () => {
