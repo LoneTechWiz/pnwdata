@@ -5,6 +5,7 @@ import db from "./db";
 import { readAppConfig } from "./app-config";
 import { processSyncRequest } from "./sync-request";
 import { syncRaidIntelligence } from "./raid-sync";
+import { syncTrades } from "./trade-sync";
 import { upsertTaxBrackets, replaceTaxRecords, type RawTaxBracket, type RawTaxRecord } from "./tax-revenue";
 
 interface StockpileAlertConfig {
@@ -383,9 +384,18 @@ const SYNC_REQUEST_POLL_MS = 2 * 1000;
 let activeSync: Promise<void> | null = null;
 let processingSyncRequest = false;
 
+/** The main sync, then the game-wide trades. Trades run on their own so a problem there can't fail the member sync, or the reverse. */
+async function syncEverything(): Promise<void> {
+  try {
+    await sync();
+  } finally {
+    await syncTrades(gql).catch((error) => console.error("[Trade Sync] Failed:", error));
+  }
+}
+
 export function runSync(): Promise<void> {
   if (!activeSync) {
-    activeSync = sync().finally(() => {
+    activeSync = syncEverything().finally(() => {
       activeSync = null;
     });
   }

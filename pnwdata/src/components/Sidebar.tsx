@@ -52,6 +52,7 @@ const hiddenNavSections = [
       { label: "Credits", href: "/credits", icon: Coins },
       { label: "Revenue", href: "/revenue", icon: Wallet },
       { label: "Trade Prices", href: "/trade-prices", icon: TrendingUp },
+      { label: "Top Traders", href: "/top-traders", icon: Trophy },
       { label: "City Cost", href: "/city-cost", icon: Calculator },
       { label: "Rebuild Cost", href: "/rebuild-cost", icon: Hammer },
     ],

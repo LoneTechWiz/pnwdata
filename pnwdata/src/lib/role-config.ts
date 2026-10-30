@@ -36,6 +36,7 @@ export const ADMIN_PAGE_PATHS = [
   "/trade-prices",
   "/city-cost",
   "/rebuild-cost",
+  "/top-traders",
   "/rebuild-config",
   "/tax-config",
 ] as const;

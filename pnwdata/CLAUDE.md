@@ -68,6 +68,7 @@ Snapshot rows store JSON text in a `data TEXT` column alongside an `updated_at I
 - `alliance_meta` — single row (id=1) with alliance stats
 - `trade_prices` — single row (id=1) with 24h average market prices
 - `trade_price_history` — one row per P&W trade price snapshot (`price_id` PK, `recorded_at`, JSON `data`); `INSERT OR IGNORE`d each sync (which also backfills the last 100 snapshots) and pruned to 30 days
+- `trades` — the game's trades and offers of every type (global, personal, alliance), one real-column row per P&W trade id: type, posted `date`, sender (seller)/receiver (buyer) ids, `offer_resource`, `offer_amount`, `buy_or_sell`, `price` (per unit), `accepted`, `date_accepted`, `original_trade_id`. Dates are Unix ms (UTC). Filled by `src/lib/trade-sync.ts` from the main sync loop (own error handling): new rows are walked by id from the highest stored, the first run backfills a year over several syncs (3 pages of 1000 per sync), and recently accepted trades are re-read. Rows older than 365 days are pruned each sync. `accepted = 0` means the offer was posted; it may since have been cancelled
 - `discord_nation_links` — nation-to-Discord mappings derived from server nicknames by `darth-protocol`
 - `game_info` — single row (id=1) with radiation levels per continent
 - `sync_status` — single row (id=1) tracking last sync time, status, counts
@@ -143,9 +144,14 @@ The sidebar has three tiers:
 | `/revenue` | Actual tax collected vs. real alliance revenue vs. member safekept amount, per bracket and per alliance (main + offshore) |
 | `/trade-prices` | Current 24h average price per resource with change vs 24h ago, plus a price-history line chart (24h/7d/30d) per resource and CSV export |
 | `/city-cost` | City cost calculator: enter nation IDs and a target city count to get each nation's total cost plus a per-city cost table. Uses the post-March-2025 formula in `src/lib/city-cost.ts` — `max(100000·x³ + 150000·x + 75000, city²·100000)` with `x = city − city_average/4`, `city_average` from the API's `game_info` — then Manifest Destiny (−5%, boosted +50% by the Government Support Agency and +25% by the Bureau of Domestic Affairs), then the nation's `cities_discount` refund credit. Nations are fetched live from the PnW API |
+| `/top-traders` | The 100 nations with the most trading profit on the global market over a chosen window (24h/7d/30d/90d/1y), from the `trades` table via `src/lib/trader-profit.ts`. Profit per resource = units both bought and sold × (average sell price − average buy price), so pure producers/consumers don't rank; only accepted `GLOBAL` trades count, the seller is `sender_id` and the buyer `receiver_id`. Nation names are looked up live from the API. CSV export |
 | `/rebuild-cost` | Infrastructure rebuild estimate: for every alliance member, cost to take each city from the tier's starting infra to its target infra (tier by city count: <20, 20-29, 30-39, 40+), via `src/lib/rebuild-cost.ts`. Matches the game's `/tools/infra` calculator: per-point price `300 + |level−10|^2.2/710` (rounded to the cent), bought in 100-point blocks (leftover block first) each priced at the level it starts from, then −5% each for Center for Civil Engineering and Advanced Engineering Corps and −5% for the Urbanization policy, assumed for every nation regardless of its actual policy (boosted +50% by the Government Support Agency, +25% by the Bureau of Domestic Affairs). Per-tier and grand totals, CSV export |
 | `/rebuild-config` | Admin UI for the starting/target infra of each rebuild tier; stored in the `rebuild-config` `app_config` row, falling back to built-in defaults (0 → 1500) when unset (canManage only) |
 | `/tax-config` | Admin UI to set the real rate per P&W tax bracket (capped at the bracket's nominal rate); e.g. a bracket nominally at 100/100 with a real rate of 20/20 means 80% of what's collected is member safekeep, not alliance revenue |
+
+### Trade APIs
+
+- `GET /api/average-price-paid?nation_id=<id>&resource=<resource>&amount=<n>` — average price per unit the nation paid for `n` units of the resource, from the `trades` table (`src/lib/average-price-paid.ts`). Takes the nation's accepted `GLOBAL` purchases (it is the `receiver_id`) newest first until `n` units are covered, pro-rating the last trade. Returns `averagePrice` (null with no purchases on record), `totalCost`, `unitsCovered`, `complete` (false when it bought less than `n` in the 365 days kept), `trades` and the newest/oldest purchase times. Like the other `/api/` data routes it needs no login
 
 ### External APIs
 

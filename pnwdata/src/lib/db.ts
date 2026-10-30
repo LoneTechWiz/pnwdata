@@ -97,6 +97,26 @@ db.exec(`
     data TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS trades (
+    id INTEGER PRIMARY KEY,
+    type TEXT,
+    date INTEGER NOT NULL,
+    sender_id INTEGER,
+    receiver_id INTEGER,
+    offer_resource TEXT,
+    offer_amount INTEGER,
+    buy_or_sell TEXT,
+    price INTEGER,
+    accepted INTEGER NOT NULL DEFAULT 0,
+    date_accepted INTEGER,
+    original_trade_id INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(date);
+  CREATE INDEX IF NOT EXISTS idx_trades_resource_date ON trades(offer_resource, date);
+  CREATE INDEX IF NOT EXISTS idx_trades_date_accepted ON trades(date_accepted);
+  CREATE INDEX IF NOT EXISTS idx_trades_original ON trades(original_trade_id);
+  CREATE INDEX IF NOT EXISTS idx_trades_buyer ON trades(receiver_id, offer_resource, date_accepted);
+
   CREATE TABLE IF NOT EXISTS applicants (
     id INTEGER PRIMARY KEY,
     data TEXT NOT NULL,
