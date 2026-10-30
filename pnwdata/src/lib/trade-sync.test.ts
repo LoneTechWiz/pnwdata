@@ -97,12 +97,12 @@ describe("syncTrades", () => {
     expect(database.prepare("SELECT MAX(id) AS id FROM trades").get()).toEqual({ id: 106 });
   });
 
-  it("backfills a long history a few pages per run without skipping any ids", async () => {
+  it("can be capped to a few pages per run, and the next run carries on without skipping any ids", async () => {
     const all = Array.from({ length: 4500 }, (_, i) => trade(1 + i));
     const api = fakeApi(all);
-    await syncTrades(api.gql, database, NOW);
+    await syncTrades(api.gql, database, NOW, 3);
     expect(database.prepare("SELECT COUNT(*) AS n FROM trades").get()).toEqual({ n: 3000 });
-    await syncTrades(api.gql, database, NOW);
+    await syncTrades(api.gql, database, NOW, 3);
     expect(database.prepare("SELECT COUNT(*) AS n, MAX(id) AS top FROM trades").get()).toEqual({ n: 4500, top: 4500 });
   });
 
@@ -110,9 +110,9 @@ describe("syncTrades", () => {
     const all = Array.from({ length: 4000 }, (_, i) => trade(1 + i));
     all[3999] = trade(4000, { accepted: true, date_accepted: "2026-10-30 11:00:00" });
     const api = fakeApi(all);
-    await syncTrades(api.gql, database, NOW);
+    await syncTrades(api.gql, database, NOW, 3);
     expect(database.prepare("SELECT MAX(id) AS id FROM trades").get()).toEqual({ id: 3000 });
-    await syncTrades(api.gql, database, NOW);
+    await syncTrades(api.gql, database, NOW, 3);
     expect(database.prepare("SELECT COUNT(*) AS n FROM trades").get()).toEqual({ n: 4000 });
   });
 
@@ -122,6 +122,12 @@ describe("syncTrades", () => {
     all[0] = trade(1, { accepted: true, receiver_id: "9", date_accepted: "2026-10-30 09:00:00" });
     await syncTrades(fakeApi(all).gql, database, NOW);
     expect(database.prepare("SELECT accepted, receiver_id FROM trades WHERE id = 1").get()).toEqual({ accepted: 1, receiver_id: 9 });
+  });
+
+  it("catches up on a long history in a single run by default", async () => {
+    const api = fakeApi(Array.from({ length: 7500 }, (_, i) => trade(1 + i)));
+    await syncTrades(api.gql, database, NOW);
+    expect(database.prepare("SELECT COUNT(*) AS n FROM trades").get()).toEqual({ n: 7500 });
   });
 
   it("does nothing when the game has no trades in the window", async () => {

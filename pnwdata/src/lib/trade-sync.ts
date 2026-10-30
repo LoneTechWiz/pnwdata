@@ -7,11 +7,10 @@ export type GqlFn = <T>(query: string, variables?: Record<string, unknown>) => P
 export const TRADE_RETENTION_DAYS = 365;
 const PAGE_SIZE = 1000;
 /**
- * Pages of new trades fetched per sync. Normal runs need one page; this only matters while the first
- * run catches up on a year of history, where it spreads the backfill over many syncs so it doesn't
- * eat the API key's daily request quota.
+ * Most pages of new trades fetched per sync. Normal runs need one page and stop at the first short one;
+ * the cap only bounds how long a single sync can run while the first run catches up on history.
  */
-const MAX_PAGES_PER_RUN = 3;
+const MAX_PAGES_PER_RUN = 300;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const TRADE_FIELDS = "id type date sender_id receiver_id offer_resource offer_amount buy_or_sell price accepted date_accepted original_trade_id";
@@ -113,10 +112,10 @@ export function pruneTrades(database: Database, now: number): number {
 /**
  * Pulls the game's trades and offers (every type) into the `trades` table and drops anything older
  * than a year. New rows are walked by id from the highest one stored; on the very first run that
- * starts at the oldest trade inside the retention window and catches up over several syncs.
+ * starts at the oldest trade inside the retention window and pages until it reaches the present.
  * Recently accepted trades are re-read too, in case the game updates an offer in place on acceptance.
  */
-export async function syncTrades(gql: GqlFn, database: Database = db, now = Date.now()): Promise<void> {
+export async function syncTrades(gql: GqlFn, database: Database = db, now = Date.now(), maxPages = MAX_PAGES_PER_RUN): Promise<void> {
   let cursor = (database.prepare("SELECT MAX(id) AS id FROM trades").get() as { id: number | null }).id;
   if (cursor === null) {
     const after = new Date(now - TRADE_RETENTION_DAYS * DAY_MS).toISOString().slice(0, 19).replace("T", " ");
@@ -127,7 +126,7 @@ export async function syncTrades(gql: GqlFn, database: Database = db, now = Date
   }
 
   let fetched = 0;
-  for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const { trades } = await gql<{ trades: { data: RawTrade[] } }>(NEW_TRADES_QUERY, { min_id: cursor + 1, first: PAGE_SIZE });
     if (trades.data.length === 0) break;
     storeTrades(database, trades.data);
